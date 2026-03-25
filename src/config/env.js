@@ -1,0 +1,13 @@
+import dotenv from "dotenv";
+
+dotenv.config();
+
+export const env = {
+  port: Number(process.env.PORT || 3000),
+  nodeEnv: process.env.NODE_ENV || "development",
+  frontendUrl: process.env.FRONTEND_URL || "*",
+  frontendSuccessUrl: process.env.FRONTEND_SUCCESS_URL || "https://guiimont.github.io/TanaMao/sucesso.html",
+  frontendFailureUrl: process.env.FRONTEND_FAILURE_URL || "https://guiimont.github.io/TanaMao/falha.html",
+  mercadoPagoAccessToken: process.env.MERCADOPAGO_ACCESS_TOKEN || "",
+  mercadoPagoWebhookSecret: process.env.MERCADOPAGO_WEBHOOK_SECRET || ""
+};
