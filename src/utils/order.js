@@ -1,22 +1,22 @@
-import { PRODUCT_CATALOG } from "../catalog.js";
-
-export function buildOrder(items, paymentMethod) {
+export function buildOrderFromDatabase(items, productsMap, paymentMethod) {
   const detailedItems = items.map((item) => {
-    const found = PRODUCT_CATALOG[item.id];
+    const found = productsMap.get(item.id);
     if (!found) {
-      throw new Error(`Produto inválido: ${item.id}`);
+      throw new Error(`Produto inválido ou inativo: ${item.id}`);
     }
 
+    const unitPrice = Number(found.price);
     return {
       id: found.id,
-      title: found.title,
+      title: found.name,
+      description: found.description,
       quantity: item.quantity,
-      unit_price: found.unit_price,
-      line_total: found.unit_price * item.quantity
+      unit_price: unitPrice,
+      line_total: Number((unitPrice * item.quantity).toFixed(2))
     };
   });
 
-  const subtotal = detailedItems.reduce((acc, item) => acc + item.line_total, 0);
+  const subtotal = Number(detailedItems.reduce((acc, item) => acc + item.line_total, 0).toFixed(2));
   const discountRate = paymentMethod === "pix" || paymentMethod === "debito" ? 0.1 : 0;
   const discount = Number((subtotal * discountRate).toFixed(2));
   const total = Number((subtotal - discount).toFixed(2));

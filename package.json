@@ -1,7 +1,7 @@
 {
   "name": "tanamao-backend",
-  "version": "1.0.0",
-  "description": "Backend de checkout e pagamentos da Tá na Mão!",
+  "version": "2.0.0",
+  "description": "Backend Tá na Mão! com Supabase + Mercado Pago",
   "type": "module",
   "main": "src/server.js",
   "scripts": {
@@ -12,6 +12,7 @@
     "node": ">=20"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.49.1",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.21.2",
