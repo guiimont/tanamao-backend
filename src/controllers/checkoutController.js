@@ -12,6 +12,14 @@ const PAYMENT_METHOD_LABELS = {
   vale: "Vale Alimentação"
 };
 
+// Mapeia o método escolhido para o ID que o Mercado Pago entende
+const PAYMENT_METHOD_IDS = {
+  pix: ["pix"],
+  debito: ["debit_card"],
+  credito: ["credit_card"],
+  vale: ["account_money"]
+};
+
 export async function createPreference(req, res) {
   try {
     const parsed = checkoutSchema.safeParse(req.body);
@@ -31,6 +39,9 @@ export async function createPreference(req, res) {
     const externalReference = buildExternalReference();
 
     const title = `Pedido Tá na Mão! - ${PAYMENT_METHOD_LABELS[paymentMethod]}`;
+
+    // Métodos permitidos baseados na escolha do cliente
+    const allowedMethods = PAYMENT_METHOD_IDS[paymentMethod] || null;
 
     const preferenceBody = {
       items: [
@@ -55,6 +66,27 @@ export async function createPreference(req, res) {
         pending: env.frontendSuccessUrl
       },
       auto_return: "approved",
+
+      // Força o método de pagamento escolhido pelo cliente no site
+      ...(allowedMethods && {
+        payment_methods: {
+          excluded_payment_types: [
+            { id: "ticket" },
+            { id: "atm" }
+          ].filter(excluded => {
+            const allowed = {
+              pix: ["ticket", "atm", "debit_card", "credit_card", "account_money"],
+              debito: ["ticket", "atm", "pix", "credit_card", "account_money"],
+              credito: ["ticket", "atm", "pix", "debit_card", "account_money"],
+              vale: ["ticket", "atm", "pix", "debit_card", "credit_card"]
+            };
+            return (allowed[paymentMethod] || []).includes(excluded.id);
+          }),
+          excluded_payment_methods: [],
+          installments: paymentMethod === "credito" ? 12 : 1
+        }
+      }),
+
       metadata: {
         brand: "Tá na Mão!",
         source,
@@ -74,10 +106,6 @@ export async function createPreference(req, res) {
       external_reference: externalReference,
       customer_name: customer.nome,
       customer_phone: customer.telefone,
-      customer_age: customer.idade ? String(customer.idade) : null,
-      customer_profession: customer.profissao || null,
-      customer_married: customer.casado || false,
-      customer_has_children: customer.filhos || false,
       payment_method: paymentMethod,
       payment_status: "pending",
       mp_preference_id: response.id || null,
