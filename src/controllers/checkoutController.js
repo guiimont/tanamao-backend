@@ -12,14 +12,6 @@ const PAYMENT_METHOD_LABELS = {
   vale: "Vale Alimentação"
 };
 
-// Mapeia o método escolhido para o ID que o Mercado Pago entende
-const PAYMENT_METHOD_IDS = {
-  pix: ["pix"],
-  debito: ["debit_card"],
-  credito: ["credit_card"],
-  vale: ["account_money"]
-};
-
 export async function createPreference(req, res) {
   try {
     const parsed = checkoutSchema.safeParse(req.body);
@@ -40,9 +32,7 @@ export async function createPreference(req, res) {
 
     const title = `Pedido Tá na Mão! - ${PAYMENT_METHOD_LABELS[paymentMethod]}`;
 
-    // Métodos permitidos baseados na escolha do cliente
-    const allowedMethods = PAYMENT_METHOD_IDS[paymentMethod] || null;
-
+    // Preferência LIMPA e UNIVERSAL do Mercado Pago
     const preferenceBody = {
       items: [
         {
@@ -66,27 +56,12 @@ export async function createPreference(req, res) {
         pending: env.frontendSuccessUrl
       },
       auto_return: "approved",
-
-      // Força o método de pagamento escolhido pelo cliente no site
-      ...(allowedMethods && {
-        payment_methods: {
-          excluded_payment_types: [
-            { id: "ticket" },
-            { id: "atm" }
-          ].filter(excluded => {
-            const allowed = {
-              pix: ["ticket", "atm", "debit_card", "credit_card", "account_money"],
-              debito: ["ticket", "atm", "pix", "credit_card", "account_money"],
-              credito: ["ticket", "atm", "pix", "debit_card", "account_money"],
-              vale: ["ticket", "atm", "pix", "debit_card", "credit_card"]
-            };
-            return (allowed[paymentMethod] || []).includes(excluded.id);
-          }),
-          excluded_payment_methods: [],
-          installments: paymentMethod === "credito" ? 12 : 1
-        }
-      }),
-
+      payment_methods: {
+        excluded_payment_types: [
+          { id: "ticket" } // Excluímos apenas boleto, pois não é instantâneo e esfria a marmita
+        ],
+        installments: 12
+      },
       metadata: {
         brand: "Tá na Mão!",
         source,
@@ -102,10 +77,14 @@ export async function createPreference(req, res) {
 
     const response = await preferenceClient.create({ body: preferenceBody });
 
+    // Salva no banco com o endereço incluso (se houver)
     await createOrder({
       external_reference: externalReference,
       customer_name: customer.nome,
       customer_phone: customer.telefone,
+      delivery_address: customer.endereco 
+        ? `${customer.endereco.rua || ''}, ${customer.endereco.numero || ''} ${customer.endereco.complemento || ''} - ${customer.endereco.bairro || ''}. CEP: ${customer.endereco.cep || ''}`
+        : null,
       payment_method: paymentMethod,
       payment_status: "pending",
       mp_preference_id: response.id || null,
