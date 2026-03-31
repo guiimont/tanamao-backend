@@ -1,3 +1,4 @@
+
 import { preferenceClient } from "../config/mercadopago.js";
 import { env } from "../config/env.js";
 import { checkoutSchema } from "../validators/checkout.js";
@@ -30,52 +31,40 @@ export async function createPreference(req, res) {
     const order = buildOrderFromDatabase(items, productsMap, paymentMethod);
     const externalReference = buildExternalReference();
 
-    const title = `Pedido Tá na Mão! - ${PAYMENT_METHOD_LABELS[paymentMethod]}`;
+    const title = `Pedido Tá na Mão!`;
 
-    // Preferência LIMPA e UNIVERSAL do Mercado Pago
+    // MÁXIMA SIMPLIFICAÇÃO: Removido tudo que não é estritamente obrigatório
+    // para evitar qualquer bloqueio do Mercado Pago.
     const preferenceBody = {
       items: [
         {
-          id: externalReference,
-          title,
+          id: "marmitas",
+          title: title,
           quantity: 1,
           unit_price: order.total,
-          currency_id: "BRL",
-          description: order.detailedItems.map((item) => `${item.title} x${item.quantity}`).join(", ")
+          currency_id: "BRL"
         }
       ],
       payer: {
         name: customer.nome,
-        phone: { number: customer.telefone }
+        // Mercado Pago as vezes bloqueia se o formato do telefone for estranho, melhor passar só email fake ou nada
+        email: "cliente@tanamaofit.com.br"
       },
       external_reference: externalReference,
-      statement_descriptor: "TANAMAO",
       back_urls: {
         success: env.frontendSuccessUrl,
         failure: env.frontendFailureUrl,
         pending: env.frontendSuccessUrl
       },
       auto_return: "approved",
-      payment_methods: {
-        excluded_payment_types: [
-          { id: "ticket" } // Excluímos apenas boleto, pois não é instantâneo e esfria a marmita
-        ],
-        installments: 12
-      },
-      metadata: {
-        brand: "Tá na Mão!",
-        source,
-        paymentMethod,
-        customer,
-        subtotal: order.subtotal,
-        discount: order.discount,
-        total: order.total,
-        items: order.detailedItems
-      },
       notification_url: req.protocol + "://" + req.get("host") + "/api/payments/webhook"
     };
 
+    console.log("[MercadoPago] Criando preferência:", JSON.stringify(preferenceBody, null, 2));
+
     const response = await preferenceClient.create({ body: preferenceBody });
+
+    console.log("[MercadoPago] Preferência criada. ID:", response.id);
 
     // Salva no banco com o endereço incluso (se houver)
     await createOrder({
@@ -109,7 +98,12 @@ export async function createPreference(req, res) {
       }
     });
   } catch (error) {
-    console.error("[checkout:createPreference]", error);
+    console.error("[checkout:createPreference] Erro fatal:", error);
+
+    // Adicionado log detalhado do erro do MP
+    if(error.cause) console.error("Detalhes da causa:", error.cause);
+    if(error.response) console.error("Resposta do MP:", error.response);
+
     return res.status(500).json({
       ok: false,
       message: "Erro ao criar preferência de pagamento.",
