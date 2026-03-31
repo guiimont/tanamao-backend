@@ -48,7 +48,7 @@ export async function createPreference(req, res) {
       payer: {
         name: customer.nome,
         // Mercado Pago as vezes bloqueia se o formato do telefone for estranho, melhor passar só email fake ou nada
-        email: "cliente@tanamaofit.com.br"
+        email: "pix@tanamaofit.com.br"
       },
       external_reference: externalReference,
       back_urls: {
