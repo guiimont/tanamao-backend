@@ -26,6 +26,31 @@ export async function createPreference(req, res) {
     }
 
     const { items, paymentMethod, customer, source } = parsed.data;
+    // pega limite
+    const { data: limitData } = await supabase
+      .from('settings')
+      .select('value')
+      .eq('key', 'orders_limit')
+      .single();
+
+    const limit = Number(limitData.value);
+
+    // conta pedidos pagos hoje
+    const hoje = new Date().toISOString().slice(0,10);
+
+    const { count } = await supabase
+      .from('orders')
+      .select('*', { count: 'exact', head: true })
+      .gte('created_at', hoje)
+      .eq('payment_status', 'approved');
+
+    if (count >= limit) {
+      return res.status(400).json({
+        ok: false,
+        message: "Limite de pedidos atingido."
+      });
+    }
+
     const ids = items.map((item) => item.id);
     const productsMap = await getProductsMapByIds(ids);
     const order = buildOrderFromDatabase(items, productsMap, paymentMethod);
