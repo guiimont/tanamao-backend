@@ -35,29 +35,22 @@ export async function deleteProduct(req, res) {
       message: "Erro inesperado ao excluir produto."
     });
   }
-    export async function createProduct(req, res) {
-      try {
-        const { name, description, price, image_url } = req.body;
+    async function createProduct(req, res) {
+  try {
+    const { name, description, price, image_url } = req.body;
 
-        const { error } = await supabase
-          .from("products")
-          .insert([{
-          name,
-          description: description || "",
-          price: price || 0,
-          image_url: image_url || ""
-        }]);
+    const { error } = await supabase
+      .from("products")
+      .insert([{ name, description, price, image_url }]);
 
-      if (error) {
-        console.error(error);
-        return res.status(500).json({ ok: false });
-      }
+    if (error) return res.status(500).json({ ok:false });
 
-      res.json({ ok: true });
+    res.json({ ok:true });
 
-    } catch (err) {
-      console.error(err);
-      res.status(500).json({ ok: false });
-    }
+  } catch (err) {
+    res.status(500).json({ ok:false });
+  }
 }
+
+module.exports = { createProduct };
 
