@@ -45,19 +45,4 @@ app.listen(env.port, () => {
   console.log(`Tá na Mão! backend rodando na porta ${env.port}`);
 });
 
-app.post('/api/operations/login', async (req, res) => {
-  const { senha } = req.body;
-
-  const { data } = await supabase
-    .from('settings')
-    .select('value')
-    .eq('key', 'admin_password')
-    .single();
-
-  if (!data || senha !== data.value) {
-    return res.status(401).json({ ok:false });
-  }
-
-  res.json({ ok:true });
-});
 
