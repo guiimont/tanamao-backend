@@ -1,33 +1,27 @@
 import { Router } from "express";
-import { listOperationalOrders, updateOrderStatusById } from "../services/orderService.js";
+import { supabase } from "../config/supabase.js";
 
 const router = Router();
 
-router.get("/orders", async (req, res) => {
+router.post("/login", async (req, res) => {
   try {
-    const orders = await listOperationalOrders();
-    return res.status(200).json({ ok: true, orders });
-  } catch (error) {
-    console.error("[operations:listOrders]", error);
-    return res.status(500).json({ ok: false, message: "Erro ao listar pedidos." });
-  }
-});
+    const { senha } = req.body;
 
-router.patch("/orders/:id/status", async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { delivery_status } = req.body || {};
+    const { data } = await supabase
+      .from("settings")
+      .select("value")
+      .eq("key", "admin_password")
+      .single();
 
-    const allowed = ["pending", "preparing", "ready", "out_for_delivery", "delivered"];
-    if (!allowed.includes(delivery_status)) {
-      return res.status(400).json({ ok: false, message: "Status inválido." });
+    if (!data || senha !== data.value) {
+      return res.status(401).json({ ok: false });
     }
 
-    const order = await updateOrderStatusById(id, { delivery_status });
-    return res.status(200).json({ ok: true, order });
-  } catch (error) {
-    console.error("[operations:updateStatus]", error);
-    return res.status(500).json({ ok: false, message: "Erro ao atualizar status." });
+    return res.json({ ok: true });
+
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ ok: false });
   }
 });
 
