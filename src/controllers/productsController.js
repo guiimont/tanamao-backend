@@ -85,5 +85,33 @@ export async function deleteProduct(req, res) {
     });
   }
 }
+export async function updateProduct(req, res) {
+  try {
+    const { id } = req.params;
+    const { name, description, price, image_url } = req.body;
+
+    const { error } = await supabase
+      .from("products")
+      .update({
+        name,
+        description,
+        price,
+        image_url
+      })
+      .eq("id", id);
+
+    if (error) {
+      console.error("[products:update]", error);
+      return res.status(500).json({ ok: false });
+    }
+
+    return res.json({ ok: true });
+
+  } catch (err) {
+    console.error("[products:update]", err);
+    return res.status(500).json({ ok: false });
+  }
+}
+
 
 
