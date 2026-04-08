@@ -10,8 +10,11 @@ import operationalRoutes from "./routes/operationalRoutes.js";
 
 const app = express();
 
+// Configurações de Segurança e Proxy
 app.set("trust proxy", true);
 app.use(helmet());
+
+// Configuração de CORS (Mantendo sua lógica de segurança)
 app.use(cors({
   origin: (origin, callback) => {
     if (!origin) return callback(null, true);
@@ -19,9 +22,16 @@ app.use(cors({
     return callback(new Error("Not allowed by CORS"));
   }
 }));
-app.use(morgan("dev"));
-app.use(express.json({ limit: "1mb" }));
 
+app.use(morgan("dev"));
+
+// --- AQUI ESTÁ A MUDANÇA PRINCIPAL ---
+// Aumentando o limite para suportar imagens em Base64
+app.use(express.json({ limit: "50mb" }));
+app.use(express.urlencoded({ limit: "50mb", extended: true }));
+// -------------------------------------
+
+// Rota de Health Check
 app.get("/health", (_req, res) => {
   res.json({
     ok: true,
@@ -31,18 +41,25 @@ app.get("/health", (_req, res) => {
   });
 });
 
+// Registro das Rotas da API
 app.use("/api/products", productRoutes);
 app.use("/api/checkout", checkoutRoutes);
 app.use("/api/payments", paymentRoutes);
 app.use("/api/operations", operationalRoutes);
 
+// Middleware de Tratamento de Erros Global
 app.use((err, _req, res, _next) => {
   console.error("[server:error]", err);
-  return res.status(500).json({ ok: false, message: err.message || "internal_server_error" });
+  return res.status(500).json({ 
+    ok: false, 
+    message: err.message || "internal_server_error" 
+  });
 });
 
+// Inicialização do Servidor
 app.listen(env.port, () => {
-  console.log(`Tá na Mão! backend rodando na porta ${env.port}`);
+  console.log(`🚀 Tá na Mão! backend rodando na porta ${env.port}`);
 });
+
 
 
