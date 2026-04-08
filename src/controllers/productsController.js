@@ -1,22 +1,25 @@
 import { supabase } from "../config/supabase.js";
-import { listActiveProducts } from "../services/productService.js";
 
-// LISTAR (Mantido)
+// O Serviço original pode continuar existindo, mas aqui fazemos a listagem direta de forma segura.
 export async function listProducts(_req, res) {
   try {
-    const products = await listActiveProducts();
-    return res.json({ ok: true, products });
+    const { data, error } = await supabase
+      .from("products")
+      .select("*")
+      .order("sort_order", { ascending: true });
+
+    if (error) throw error;
+    return res.json({ ok: true, products: data });
   } catch (error) {
     console.error("[products:list]", error);
     return res.status(500).json({ ok: false, message: "Erro ao listar produtos." });
   }
 }
 
-// CRIAR (Atualizado com a nova lógica do Agente)
 export async function createProduct(req, res) {
   try {
     const { name, description, price, image_url } = req.body;
-    
+
     if (!name) {
       return res.status(400).json({ ok: false, message: "Nome obrigatório" });
     }
@@ -27,7 +30,7 @@ export async function createProduct(req, res) {
         name,
         description: description || "",
         price: Number(price) || 0,
-        image_url: image_url || null // Aqui entra o Base64 grande
+        image_url: image_url || null
       }])
       .select()
       .single();
@@ -36,7 +39,6 @@ export async function createProduct(req, res) {
       console.error("[products:create]", error);
       return res.status(500).json({ ok: false, message: error.message });
     }
-
     return res.status(201).json({ ok: true, product: data });
   } catch (err) {
     console.error("[products:create:fatal]", err);
@@ -44,7 +46,6 @@ export async function createProduct(req, res) {
   }
 }
 
-// ATUALIZAR (Mantido)
 export async function updateProduct(req, res) {
   try {
     const { id } = req.params;
@@ -55,16 +56,15 @@ export async function updateProduct(req, res) {
       .update({
         name,
         description,
-        price: Number(price),
+        price: Number(price) || 0,
         image_url
       })
       .eq("id", id);
 
     if (error) {
       console.error("[products:update]", error);
-      return res.status(500).json({ ok: false, message: "Erro ao atualizar" });
+      return res.status(500).json({ ok: false });
     }
-
     return res.json({ ok: true });
   } catch (err) {
     console.error("[products:update]", err);
@@ -72,7 +72,6 @@ export async function updateProduct(req, res) {
   }
 }
 
-// DELETAR (Mantido)
 export async function deleteProduct(req, res) {
   try {
     const { id } = req.params;
@@ -85,7 +84,6 @@ export async function deleteProduct(req, res) {
       console.error("[products:delete]", error);
       return res.status(500).json({ ok: false, message: "Erro ao excluir produto." });
     }
-
     return res.json({ ok: true });
   } catch (err) {
     console.error("[products:delete]", err);
