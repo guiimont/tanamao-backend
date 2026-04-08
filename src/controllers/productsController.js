@@ -1,7 +1,7 @@
 import { supabase } from "../config/supabase.js";
 import { listActiveProducts } from "../services/productService.js";
 
-// LISTAR
+// LISTAR (Mantido)
 export async function listProducts(_req, res) {
   try {
     const products = await listActiveProducts();
@@ -12,16 +12,13 @@ export async function listProducts(_req, res) {
   }
 }
 
-// CRIAR
+// CRIAR (Atualizado com a nova lógica do Agente)
 export async function createProduct(req, res) {
   try {
     const { name, description, price, image_url } = req.body;
-
+    
     if (!name) {
-      return res.status(400).json({
-        ok: false,
-        message: "Nome obrigatório"
-      });
+      return res.status(400).json({ ok: false, message: "Nome obrigatório" });
     }
 
     const { data, error } = await supabase
@@ -30,61 +27,24 @@ export async function createProduct(req, res) {
         name,
         description: description || "",
         price: Number(price) || 0,
-        image_url: image_url || ""
+        image_url: image_url || null // Aqui entra o Base64 grande
       }])
       .select()
       .single();
 
     if (error) {
       console.error("[products:create]", error);
-      return res.status(500).json({
-        ok: false,
-        message: error.message
-      });
+      return res.status(500).json({ ok: false, message: error.message });
     }
 
-    return res.json({
-      ok: true,
-      product: data
-    });
-
+    return res.status(201).json({ ok: true, product: data });
   } catch (err) {
     console.error("[products:create:fatal]", err);
-    return res.status(500).json({
-      ok: false,
-      message: "Erro interno no servidor"
-    });
+    return res.status(500).json({ ok: false, message: "Erro interno no servidor" });
   }
 }
 
-// DELETAR
-export async function deleteProduct(req, res) {
-  try {
-    const { id } = req.params;
-
-    const { error } = await supabase
-      .from("products")
-      .delete()
-      .eq("id", id);
-
-    if (error) {
-      console.error("[products:delete]", error);
-      return res.status(500).json({
-        ok: false,
-        message: "Erro ao excluir produto."
-      });
-    }
-
-    return res.json({ ok: true });
-
-  } catch (err) {
-    console.error("[products:delete]", err);
-    return res.status(500).json({
-      ok: false,
-      message: "Erro inesperado ao excluir produto."
-    });
-  }
-}
+// ATUALIZAR (Mantido)
 export async function updateProduct(req, res) {
   try {
     const { id } = req.params;
@@ -95,21 +55,41 @@ export async function updateProduct(req, res) {
       .update({
         name,
         description,
-        price,
+        price: Number(price),
         image_url
       })
       .eq("id", id);
 
     if (error) {
       console.error("[products:update]", error);
-      return res.status(500).json({ ok: false });
+      return res.status(500).json({ ok: false, message: "Erro ao atualizar" });
     }
 
     return res.json({ ok: true });
-
   } catch (err) {
     console.error("[products:update]", err);
     return res.status(500).json({ ok: false });
+  }
+}
+
+// DELETAR (Mantido)
+export async function deleteProduct(req, res) {
+  try {
+    const { id } = req.params;
+    const { error } = await supabase
+      .from("products")
+      .delete()
+      .eq("id", id);
+
+    if (error) {
+      console.error("[products:delete]", error);
+      return res.status(500).json({ ok: false, message: "Erro ao excluir produto." });
+    }
+
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error("[products:delete]", err);
+    return res.status(500).json({ ok: false, message: "Erro inesperado ao excluir produto." });
   }
 }
 
