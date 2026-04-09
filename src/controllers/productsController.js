@@ -1,7 +1,6 @@
 import { supabase } from "../config/supabase.js";
 
-// O Serviço original pode continuar existindo, mas aqui fazemos a listagem direta de forma segura.
-export async function listProducts(_req, res) {
+export async function listProducts(req, res) {
   try {
     const { data, error } = await supabase
       .from("products")
@@ -9,10 +8,17 @@ export async function listProducts(_req, res) {
       .order("sort_order", { ascending: true });
 
     if (error) throw error;
-    return res.json({ ok: true, products: data });
-  } catch (error) {
-    console.error("[products:list]", error);
-    return res.status(500).json({ ok: false, message: "Erro ao listar produtos." });
+
+    return res.json({
+      ok: true,
+      products: data || []
+    });
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({
+      ok: false,
+      message: "Erro ao listar produtos"
+    });
   }
 }
 
@@ -21,7 +27,10 @@ export async function createProduct(req, res) {
     const { name, description, price, image_url } = req.body;
 
     if (!name) {
-      return res.status(400).json({ ok: false, message: "Nome obrigatório" });
+      return res.status(400).json({
+        ok: false,
+        message: "Nome obrigatório"
+      });
     }
 
     const { data, error } = await supabase
@@ -35,14 +44,18 @@ export async function createProduct(req, res) {
       .select()
       .single();
 
-    if (error) {
-      console.error("[products:create]", error);
-      return res.status(500).json({ ok: false, message: error.message });
-    }
-    return res.status(201).json({ ok: true, product: data });
-  } catch (err) {
-    console.error("[products:create:fatal]", err);
-    return res.status(500).json({ ok: false, message: "Erro interno no servidor" });
+    if (error) throw error;
+
+    return res.status(201).json({
+      ok: true,
+      product: data
+    });
+  } catch (e) {
+    console.error("[createProduct]", e);
+    return res.status(500).json({
+      ok: false,
+      message: "Erro ao criar produto"
+    });
   }
 }
 
@@ -61,35 +74,39 @@ export async function updateProduct(req, res) {
       })
       .eq("id", id);
 
-    if (error) {
-      console.error("[products:update]", error);
-      return res.status(500).json({ ok: false });
-    }
+    if (error) throw error;
+
     return res.json({ ok: true });
-  } catch (err) {
-    console.error("[products:update]", err);
-    return res.status(500).json({ ok: false });
+  } catch (e) {
+    console.error("[updateProduct]", e);
+    return res.status(500).json({
+      ok: false,
+      message: "Erro ao atualizar"
+    });
   }
 }
 
 export async function deleteProduct(req, res) {
   try {
     const { id } = req.params;
+
     const { error } = await supabase
       .from("products")
       .delete()
       .eq("id", id);
 
-    if (error) {
-      console.error("[products:delete]", error);
-      return res.status(500).json({ ok: false, message: "Erro ao excluir produto." });
-    }
+    if (error) throw error;
+
     return res.json({ ok: true });
-  } catch (err) {
-    console.error("[products:delete]", err);
-    return res.status(500).json({ ok: false, message: "Erro inesperado ao excluir produto." });
+  } catch (e) {
+    console.error("[deleteProduct]", e);
+    return res.status(500).json({
+      ok: false,
+      message: "Erro ao deletar"
+    });
   }
 }
+
 
 
 
