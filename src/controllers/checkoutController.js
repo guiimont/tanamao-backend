@@ -1,10 +1,10 @@
-
 import { preferenceClient } from "../config/mercadopago.js";
 import { env } from "../config/env.js";
 import { checkoutSchema } from "../validators/checkout.js";
 import { buildExternalReference, buildOrderFromDatabase } from "../utils/order.js";
 import { getProductsMapByIds } from "../services/productService.js";
 import { createOrder } from "../services/orderService.js";
+import { supabase } from "../config/supabase.js"; // ✅ Garante que o supabase está importado
 
 const PAYMENT_METHOD_LABELS = {
   pix: "Pix",
@@ -26,16 +26,15 @@ export async function createPreference(req, res) {
     }
 
     const { items, paymentMethod, customer, source } = parsed.data;
-    // pega limite
+
+    // ✅ BUSCA LIMITE DE PEDIDOS
     const { data: limitData } = await supabase
       .from('settings')
       .select('value')
       .eq('key', 'orders_limit')
       .single();
 
-    const limit = Number(limitData.value);
-
-    // conta pedidos pagos hoje
+    const limit = Number(limitData?.value || 999);
     const hoje = new Date().toISOString().slice(0,10);
 
     const { count } = await supabase
@@ -54,12 +53,29 @@ export async function createPreference(req, res) {
     const ids = items.map((item) => item.id);
     const productsMap = await getProductsMapByIds(ids);
     const order = buildOrderFromDatabase(items, productsMap, paymentMethod);
-    const externalReference = buildExternalReference();
 
+    // ✅ NOVA LÓGICA DE TAXAS DINÂMICAS
+    const { data: feeData } = await supabase
+      .from("settings")
+      .select("value")
+      .eq("key", "payment_fees")
+      .single();
+
+    const fees = feeData?.value || {};
+    const feePercent = {
+      pix: fees.pix || 0,
+      debito: fees.debit_card || 0,
+      credito: fees.credit_card || 0,
+      vale: 0
+    };
+
+    const gatewayFee = Number((order.total * (feePercent[paymentMethod] || 0) / 100).toFixed(2));
+    const netTotal = Number((order.total - gatewayFee).toFixed(2));
+    // FIM DA LÓGICA DE TAXAS
+
+    const externalReference = buildExternalReference();
     const title = `Pedido Tá na Mão!`;
 
-    // MÁXIMA SIMPLIFICAÇÃO: Removido tudo que não é estritamente obrigatório
-    // para evitar qualquer bloqueio do Mercado Pago.
     const preferenceBody = {
       items: [
         {
@@ -72,7 +88,6 @@ export async function createPreference(req, res) {
       ],
       payer: {
         name: customer.nome,
-        // Mercado Pago as vezes bloqueia se o formato do telefone for estranho, melhor passar só email fake ou nada
         email: "pix@tanamaofit.com.br"
       },
       external_reference: externalReference,
@@ -85,13 +100,9 @@ export async function createPreference(req, res) {
       notification_url: req.protocol + "://" + req.get("host") + "/api/payments/webhook"
     };
 
-    console.log("[MercadoPago] Criando preferência:", JSON.stringify(preferenceBody, null, 2));
-
     const response = await preferenceClient.create({ body: preferenceBody });
 
-    console.log("[MercadoPago] Preferência criada. ID:", response.id);
-
-    // Salva no banco com o endereço incluso (se houver)
+    // ✅ SALVA NO BANCO (INCLUINDO AS NOVAS TAXAS)
     await createOrder({
       external_reference: externalReference,
       customer_name: customer.nome,
@@ -105,6 +116,8 @@ export async function createPreference(req, res) {
       subtotal: order.subtotal,
       discount: order.discount,
       total: order.total,
+      gateway_fee: gatewayFee, // ✅ Salva a taxa calculada
+      net_total: netTotal,     // ✅ Salva o valor líquido
       items_json: order.detailedItems,
       source: source || "site"
     });
@@ -118,17 +131,14 @@ export async function createPreference(req, res) {
         subtotal: order.subtotal,
         discount: order.discount,
         total: order.total,
+        gateway_fee: gatewayFee,
+        net_total: netTotal,
         paymentMethod,
         items: order.detailedItems
       }
     });
   } catch (error) {
     console.error("[checkout:createPreference] Erro fatal:", error);
-
-    // Adicionado log detalhado do erro do MP
-    if(error.cause) console.error("Detalhes da causa:", error.cause);
-    if(error.response) console.error("Resposta do MP:", error.response);
-
     return res.status(500).json({
       ok: false,
       message: "Erro ao criar preferência de pagamento.",
@@ -136,3 +146,4 @@ export async function createPreference(req, res) {
     });
   }
 }
+
