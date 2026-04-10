@@ -1,4 +1,25 @@
 import { supabase } from "../config/supabase.js";
+import sharp from "sharp";
+
+// ✅ NOVA FUNÇÃO: Otimização de Imagem (WebP, Max 800px, 80% Qualidade)
+async function optimizeImage(base64Str) {
+  if (!base64Str || !base64Str.startsWith('data:image')) return base64Str;
+
+  try {
+    const parts = base64Str.split(';base64,');
+    const imageBuffer = Buffer.from(parts[1], 'base64');
+
+    const optimizedBuffer = await sharp(imageBuffer)
+      .resize({ width: 800, withoutEnlargement: true })
+      .webp({ quality: 80 })
+      .toBuffer();
+
+    return `data:image/webp;base64,${optimizedBuffer.toString('base64')}`;
+  } catch (error) {
+    console.error('[optimizeImage] Erro ao otimizar imagem:', error);
+    return base64Str; // Fallback de segurança: salva a original se der erro
+  }
+}
 
 export async function listProducts(req, res) {
   try {
@@ -33,13 +54,16 @@ export async function createProduct(req, res) {
       });
     }
 
+    // ✅ Otimiza a imagem antes de salvar
+    const optimizedImageUrl = await optimizeImage(image_url);
+
     const { data, error } = await supabase
       .from("products")
       .insert([{
         name,
         description: description || "",
         price: Number(price) || 0,
-        image_url: image_url || null
+        image_url: optimizedImageUrl || null
       }])
       .select()
       .single();
@@ -64,13 +88,16 @@ export async function updateProduct(req, res) {
     const { id } = req.params;
     const { name, description, price, image_url } = req.body;
 
+    // ✅ Otimiza a imagem antes de atualizar
+    const optimizedImageUrl = await optimizeImage(image_url);
+
     const { error } = await supabase
       .from("products")
       .update({
         name,
         description,
         price: Number(price) || 0,
-        image_url
+        image_url: optimizedImageUrl
       })
       .eq("id", id);
 
@@ -106,6 +133,7 @@ export async function deleteProduct(req, res) {
     });
   }
 }
+
 
 
 
