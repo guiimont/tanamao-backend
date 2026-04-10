@@ -8,6 +8,7 @@ import productRoutes from "./routes/productRoutes.js";
 import checkoutRoutes from "./routes/checkoutRoutes.js";
 import paymentRoutes from "./routes/paymentRoutes.js";
 import operationalRoutes from "./routes/operationalRoutes.js";
+import settingsRoutes from "./routes/settingsRoutes.js"; // ✅ Adicionado aqui
 
 const app = express();
 
@@ -36,6 +37,7 @@ app.use("/api/products", productRoutes);
 app.use("/api/checkout", checkoutRoutes);
 app.use("/api/payments", paymentRoutes);
 app.use("/api/operations", operationalRoutes);
+app.use("/api/settings", settingsRoutes); // ✅ Adicionado aqui
 
 // ✅ ERRO GLOBAL
 app.use((err, _req, res, _next) => {
@@ -49,6 +51,7 @@ app.use((err, _req, res, _next) => {
 app.listen(env.port, () => {
   console.log(`Backend rodando na porta ${env.port}`);
 });
+
 
 
 
