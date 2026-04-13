@@ -4,13 +4,22 @@ import { checkoutSchema } from "../validators/checkout.js";
 import { buildExternalReference, buildOrderFromDatabase } from "../utils/order.js";
 import { getProductsMapByIds } from "../services/productService.js";
 import { createOrder } from "../services/orderService.js";
-import { supabase } from "../config/supabase.js"; // ✅ Garante que o supabase está importado
+import { supabase } from "../config/supabase.js";
 
 const PAYMENT_METHOD_LABELS = {
   pix: "Pix",
   debito: "Débito",
   credito: "Crédito",
   vale: "Vale Alimentação"
+};
+
+// ✅ FUNÇÃO AUXILIAR PARA URLs RESILIENTES
+const getBaseUrl = () => {
+  let url = env.frontendUrl;
+  // Se o env estiver como "*" ou vazio, aponta para o domínio principal
+  if (!url || url === "*") url = "https://www.tanamaofit.com.br";
+  // Remove barra no final se existir para evitar links duplos //
+  return url.replace(/\/$/, "");
 };
 
 export async function createPreference(req, res) {
@@ -27,15 +36,15 @@ export async function createPreference(req, res) {
 
     const { items, paymentMethod, customer, source } = parsed.data;
 
-    // ✅ BUSCA LIMITE DE PEDIDOS
+    // ✅ 1. BUSCA LIMITE DE PEDIDOS (Tabela system_settings)
     const { data: limitData } = await supabase
-      .from('settings')
+      .from('system_settings')
       .select('value')
       .eq('key', 'orders_limit')
       .single();
 
     const limit = Number(limitData?.value || 999);
-    const hoje = new Date().toISOString().slice(0,10);
+    const hoje = new Date().toISOString().slice(0, 10);
 
     const { count } = await supabase
       .from('orders')
@@ -46,7 +55,7 @@ export async function createPreference(req, res) {
     if (count >= limit) {
       return res.status(400).json({
         ok: false,
-        message: "Limite de pedidos atingido."
+        message: "Desculpe, atingimos nosso limite de produção para hoje."
       });
     }
 
@@ -54,9 +63,9 @@ export async function createPreference(req, res) {
     const productsMap = await getProductsMapByIds(ids);
     const order = buildOrderFromDatabase(items, productsMap, paymentMethod);
 
-    // ✅ NOVA LÓGICA DE TAXAS DINÂMICAS
+    // ✅ 2. BUSCA TAXAS DINÂMICAS (Tabela system_settings)
     const { data: feeData } = await supabase
-      .from("settings")
+      .from("system_settings")
       .select("value")
       .eq("key", "payment_fees")
       .single();
@@ -71,16 +80,16 @@ export async function createPreference(req, res) {
 
     const gatewayFee = Number((order.total * (feePercent[paymentMethod] || 0) / 100).toFixed(2));
     const netTotal = Number((order.total - gatewayFee).toFixed(2));
-    // FIM DA LÓGICA DE TAXAS
 
     const externalReference = buildExternalReference();
-    const title = `Pedido Tá na Mão!`;
+    const baseUrl = getBaseUrl();
 
+    // ✅ 3. PAYLOAD MERCADO PAGO COM URLS DINÂMICAS
     const preferenceBody = {
       items: [
         {
           id: "marmitas",
-          title: title,
+          title: "Pedido Tá na Mão!",
           quantity: 1,
           unit_price: order.total,
           currency_id: "BRL"
@@ -92,17 +101,18 @@ export async function createPreference(req, res) {
       },
       external_reference: externalReference,
       back_urls: {
-        success: env.frontendSuccessUrl,
-        failure: env.frontendFailureUrl,
-        pending: env.frontendSuccessUrl
+        success: `${baseUrl}/sucesso.html`,
+        failure: `${baseUrl}/falha.html`,
+        pending: `${baseUrl}/sucesso.html`
       },
       auto_return: "approved",
-      notification_url: req.protocol + "://" + req.get("host") + "/api/payments/webhook"
+      // Webhook dinâmico baseado em onde o servidor está rodando
+      notification_url: `${req.protocol}://${req.get("host")}/api/payments/webhook`
     };
 
     const response = await preferenceClient.create({ body: preferenceBody });
 
-    // ✅ SALVA NO BANCO (INCLUINDO AS NOVAS TAXAS)
+    // ✅ 4. SALVA NO BANCO
     await createOrder({
       external_reference: externalReference,
       customer_name: customer.nome,
@@ -116,8 +126,8 @@ export async function createPreference(req, res) {
       subtotal: order.subtotal,
       discount: order.discount,
       total: order.total,
-      gateway_fee: gatewayFee, // ✅ Salva a taxa calculada
-      net_total: netTotal,     // ✅ Salva o valor líquido
+      gateway_fee: gatewayFee,
+      net_total: netTotal,
       items_json: order.detailedItems,
       source: source || "site"
     });
@@ -125,24 +135,19 @@ export async function createPreference(req, res) {
     return res.status(201).json({
       ok: true,
       checkoutUrl: response.init_point,
-      sandboxCheckoutUrl: response.sandbox_init_point,
       externalReference,
       order: {
-        subtotal: order.subtotal,
-        discount: order.discount,
         total: order.total,
-        gateway_fee: gatewayFee,
-        net_total: netTotal,
         paymentMethod,
         items: order.detailedItems
       }
     });
+
   } catch (error) {
     console.error("[checkout:createPreference] Erro fatal:", error);
     return res.status(500).json({
       ok: false,
-      message: "Erro ao criar preferência de pagamento.",
-      error: error?.message || "unknown_error"
+      message: "Erro ao processar seu pedido. Tente novamente."
     });
   }
 }
