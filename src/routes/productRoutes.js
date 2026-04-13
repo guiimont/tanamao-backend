@@ -5,13 +5,18 @@ import {
   updateProduct,
   deleteProduct
 } from "../controllers/productsController.js";
+// Importando a proteção
+import { verifyToken, requireAdmin } from "../middlewares/authMiddleware.js";
 
 const router = express.Router();
 
+// Aberto ao público (Loja)
 router.get("/", listProducts);
-router.post("/", createProduct);
-router.put("/:id", updateProduct);
-router.delete("/:id", deleteProduct);
+
+// Protegido (Só Admin logado pode mexer no estoque/preço)
+router.post("/", verifyToken, requireAdmin, createProduct);
+router.put("/:id", verifyToken, requireAdmin, updateProduct);
+router.delete("/:id", verifyToken, requireAdmin, deleteProduct);
 
 export default router;
 
