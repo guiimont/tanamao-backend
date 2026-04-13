@@ -12,6 +12,7 @@ import settingsRoutes from "./routes/settingsRoutes.js";
 import costRoutes from "./routes/costRoutes.js";
 import supplierRoutes from "./routes/supplierRoutes.js"; // ✅ Adicionado
 import stockRoutes from "./routes/stockRoutes.js";       // ✅ Adicionado
+import authRoutes from "./routes/authRoutes.js";         // ✅ Adicionado
 
 const app = express();
 
@@ -43,7 +44,8 @@ app.use("/api/operations", operationalRoutes);
 app.use("/api/settings", settingsRoutes);
 app.use("/api/costs", costRoutes);
 app.use("/api/suppliers", supplierRoutes); // ✅ Adicionado
-app.use("/api/stock", stockRoutes);         // ✅ Adicionado
+app.use("/api/stock", stockRoutes);        // ✅ Adicionado
+app.use("/api/auth", authRoutes);          // ✅ Adicionado
 
 // ✅ ERRO GLOBAL
 app.use((err, _req, res, _next) => {
