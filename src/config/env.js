@@ -10,5 +10,7 @@ export const env = {
   frontendFailureUrl: process.env.FRONTEND_FAILURE_URL || "https://www.tanamaofit.com.br/falha.html",
   mercadoPagoAccessToken: process.env.MERCADOPAGO_ACCESS_TOKEN || "",
   supabaseUrl: process.env.SUPABASE_URL || "",
-  supabaseServiceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY || ""
+  supabaseServiceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY || "",
+  // Nova variável adicionada abaixo:
+  jwtSecret: process.env.JWT_SECRET || "chave_super_secreta_tess_trocar_em_prod"
 };
