@@ -1,24 +1,22 @@
-import { supabase } from "../config/supabase.js";
-
-export async function listCosts(req, res) {
-  const { data, error } = await supabase
-    .from("costs")
-    .select("*")
-    .order("created_at", { ascending: false });
-
-  if (error) return res.status(500).json({ ok: false });
-
-  return res.json({ ok: true, costs: data });
-}
-
+// Exemplo no createCost (Aplique o mesmo no createSupplier)
 export async function createCost(req, res) {
-  const { description, value, category } = req.body;
+  try {
+    const { description, value, category } = req.body;
 
-  const { error } = await supabase
-    .from("costs")
-    .insert([{ description, value, category }]);
+    const { data, error } = await supabase
+      .from("costs")
+      .insert([{ description, value, category }])
+      .select() // <--- ADICIONE ISSO: Garante que o dado foi persistido
+      .single(); // <--- ADICIONE ISSO: Retorna o item criado
 
-  if (error) return res.status(500).json({ ok: false });
+    if (error) {
+      console.error("Erro ao inserir:", error);
+      return res.status(500).json({ ok: false, message: error.message });
+    }
 
-  return res.json({ ok: true });
+    // Retornamos o dado criado para o frontend confirmar
+    return res.json({ ok: true, data }); 
+  } catch (err) {
+    return res.status(500).json({ ok: false, message: "Erro interno" });
+  }
 }
