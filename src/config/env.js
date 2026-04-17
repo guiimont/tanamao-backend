@@ -11,6 +11,8 @@ export const env = {
   mercadoPagoAccessToken: process.env.MERCADOPAGO_ACCESS_TOKEN || "",
   supabaseUrl: process.env.SUPABASE_URL || "",
   supabaseServiceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY || "",
-  // Nova variável adicionada abaixo:
-  jwtSecret: process.env.JWT_SECRET || "chave_super_secreta_tess_trocar_em_prod"
+  jwtSecret: process.env.JWT_SECRET || "chave_super_secreta_tess_trocar_em_prod",
+  
+  // Adicione esta linha para ler a chave do Render/Processo:
+  webhookSecret: process.env.WEBHOOK_SECRET || ""
 };
