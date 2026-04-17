@@ -9,6 +9,7 @@ router.get("/orders", async (req, res) => {
     const { data, error } = await supabase
       .from("orders")
       .select("*")
+      .neq("delivery_status", "delivered") // Filtra os entregues direto no banco
       .order("created_at", { ascending: false });
 
     if (error) throw error;
