@@ -6,19 +6,9 @@ import { getProductsMapByIds } from "../services/productService.js";
 import { createOrder } from "../services/orderService.js";
 import { supabase } from "../config/supabase.js";
 
-const PAYMENT_METHOD_LABELS = {
-  pix: "Pix",
-  debito: "Débito",
-  credito: "Crédito",
-  vale: "Vale Alimentação"
-};
-
-// ✅ FUNÇÃO AUXILIAR PARA URLs RESILIENTES
 const getBaseUrl = () => {
   let url = env.frontendUrl;
-  // Se o env estiver como "*" ou vazio, aponta para o domínio principal
   if (!url || url === "*") url = "https://www.tanamaofit.com.br";
-  // Remove barra no final se existir para evitar links duplos //
   return url.replace(/\/$/, "");
 };
 
@@ -36,14 +26,14 @@ export async function createPreference(req, res) {
 
     const { items, paymentMethod, customer, source } = parsed.data;
 
-    // ✅ 1. BUSCA LIMITE DE PEDIDOS (Tabela system_settings)
-    const { data: limitData } = await supabase
-      .from('system_settings')
+    // 1. BUSCA LIMITE DE PEDIDOS
+    const { data: limitConfig } = await supabase
+      .from('settings')
       .select('value')
-      .eq('key', 'orders_limit')
+      .eq('key', 'order_limits')
       .single();
 
-    const limit = Number(limitData?.value || 999);
+    const limit = Number(limitConfig?.value?.max_per_day || 999);
     const hoje = new Date().toISOString().slice(0, 10);
 
     const { count } = await supabase
@@ -63,14 +53,14 @@ export async function createPreference(req, res) {
     const productsMap = await getProductsMapByIds(ids);
     const order = buildOrderFromDatabase(items, productsMap, paymentMethod);
 
-    // ✅ 2. BUSCA TAXAS DINÂMICAS (Tabela system_settings)
-    const { data: feeData } = await supabase
-      .from("system_settings")
+    // 2. BUSCA TAXAS DINÂMICAS
+    const { data: feeConfig } = await supabase
+      .from("settings")
       .select("value")
-      .eq("key", "payment_fees")
+      .eq("key", "gateway_fees")
       .single();
 
-    const fees = feeData?.value || {};
+    const fees = feeConfig?.value || {};
     const feePercent = {
       pix: fees.pix || 0,
       debito: fees.debit_card || 0,
@@ -84,7 +74,6 @@ export async function createPreference(req, res) {
     const externalReference = buildExternalReference();
     const baseUrl = getBaseUrl();
 
-    // ✅ 3. PAYLOAD MERCADO PAGO COM URLS DINÂMICAS
     const preferenceBody = {
       items: [
         {
@@ -106,13 +95,11 @@ export async function createPreference(req, res) {
         pending: `${baseUrl}/sucesso.html`
       },
       auto_return: "approved",
-      // Webhook dinâmico baseado em onde o servidor está rodando
       notification_url: `${req.protocol}://${req.get("host")}/api/payments/webhook`
     };
 
     const response = await preferenceClient.create({ body: preferenceBody });
 
-    // ✅ 4. SALVA NO BANCO
     await createOrder({
       external_reference: externalReference,
       customer_name: customer.nome,
@@ -147,8 +134,7 @@ export async function createPreference(req, res) {
     console.error("[checkout:createPreference] Erro fatal:", error);
     return res.status(500).json({
       ok: false,
-      message: "Erro ao processar seu pedido. Tente novamente."
+      message: "Erro ao processar seu pedido."
     });
   }
 }
-
