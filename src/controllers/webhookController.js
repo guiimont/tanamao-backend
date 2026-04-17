@@ -7,78 +7,62 @@ export async function paymentWebhook(req, res) {
     const signatureHeader = req.headers["x-signature"];
     const payload = req.body;
 
-    // 1. Validação de Autenticidade (Padrão Oficial Mercado Pago)
+    // 1. Validação de Autenticidade
     if (env.webhookSecret) {
       if (!signatureHeader) {
-        console.warn("[webhook] Assinatura ausente");
         return res.status(403).json({ ok: false, message: "Missing signature" });
       }
 
-      // Extrai timestamp (ts) e o hash (v1) do header
       const parts = signatureHeader.split(",");
-      const tsPart = parts.find(p => p.startsWith("ts="));
-      const v1Part = parts.find(p => p.startsWith("v1="));
-
-      if (!tsPart || !v1Part) {
-        return res.status(403).json({ ok: false, message: "Invalid signature format" });
-      }
-
-      const ts = tsPart.split("=")[1];
-      const v1 = v1Part.split("=")[1];
-
-      // O Mercado Pago envia o ID do recurso em data.id ou via query parameter
+      const ts = parts.find(p => p.startsWith("ts="))?.split("=")[1];
+      const v1 = parts.find(p => p.startsWith("v1="))?.split("=")[1];
       const dataId = payload.data?.id || req.query["data.id"];
 
-      // Monta o manifesto para validar conforme docs do MP
       const manifest = `id:${dataId};request-id:;ts:${ts};`;
-
-      const hash = crypto
-        .createHmac("sha256", env.webhookSecret)
-        .update(manifest)
-        .digest("hex");
+      const hash = crypto.createHmac("sha256", env.webhookSecret).update(manifest).digest("hex");
 
       if (hash !== v1) {
-        console.warn("[webhook] Assinatura inválida detectada");
         return res.status(403).json({ ok: false, message: "Invalid signature" });
       }
     }
 
-    // 2. Extração de dados do payload
-    // ASSUNÇÃO: Adaptando para o seu fluxo de e-commerce 'Tanamao'
+    // 2. Extração de dados
     const paymentStatus = payload.payment?.status || payload.type; 
     const paymentId = payload.payment?.id || payload.data?.id;
-    const orderId = payload.order?.id;
-    const itemsJson = payload.order?.items_json;
+    const orderId = payload.order?.id || payload.external_reference; 
 
-    // 3. Filtro de Status Gatilho
-    // Só processamos se o pagamento estiver aprovado ou autorizado
     if (paymentStatus !== "approved" && paymentStatus !== "authorized") {
-      console.log(`[webhook] Evento recebido (${paymentStatus}), mas ignorado.`);
       return res.status(200).json({ ok: true, message: "Event ignored" });
     }
 
-    if (!paymentId || !orderId || !itemsJson) {
-      console.error("[webhook] Dados insuficientes no payload", { paymentId, orderId });
-      return res.status(400).json({ ok: false, message: "Incomplete payload" });
+    // 3. Busca do Pedido para obter itens_json (necessário para a RPC)
+    const { data: orderData } = await supabase
+      .from('orders')
+      .select('id, items_json')
+      .eq('external_reference', orderId)
+      .single();
+
+    if (!orderData) {
+      return res.status(404).json({ ok: false, message: "Order not found" });
     }
 
-    // 4. Execução da RPC no Supabase (Baixa de Estoque + Idempotência)
-    const { data, error } = await supabase.rpc("process_order_stock", {
+    // 4. Execução da RPC (Baixa de Estoque + Idempotência)
+    const { error: rpcError } = await supabase.rpc("process_order_stock", {
       p_payment_id: String(paymentId),
-      p_order_id: String(orderId),
-      p_items: itemsJson
+      p_order_id: String(orderData.id),
+      p_items: orderData.items_json
     });
 
-    if (error) {
-      if (error.message.includes("Estoque insuficiente") || error.message.includes("não encontrado")) {
-        console.error(`[webhook:business_error] ${error.message}`);
-        // Retornamos 422 para o MP saber que o erro foi processado mas não aceito por regra de negócio
-        return res.status(422).json({ ok: false, message: error.message });
-      }
-      throw error;
+    if (rpcError) {
+      return res.status(422).json({ ok: false, message: rpcError.message });
     }
 
-    console.log(`[webhook:success] Estoque atualizado para o pedido: ${orderId}`);
+    // 5. Atualização de Status Finalizado
+    await supabase
+      .from('orders')
+      .update({ payment_status: 'approved' })
+      .eq('id', orderData.id);
+
     return res.status(200).json({ ok: true });
 
   } catch (error) {
