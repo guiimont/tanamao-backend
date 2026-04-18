@@ -5,7 +5,7 @@ import morgan from "morgan";
 import { env } from "./config/env.js";
 
 // Middlewares de Segurança
-import { verifyToken, requireAdmin } from "./middlewares/auth.js"; 
+import { verifyToken, requireAdmin } from "./middlewares/authMiddleware.js"; 
 
 import productRoutes from "./routes/productRoutes.js";
 import checkoutRoutes from "./routes/checkoutRoutes.js";
