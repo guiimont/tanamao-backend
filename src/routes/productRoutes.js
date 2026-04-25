@@ -1,19 +1,18 @@
 import express from "express";
-import {
-  listProducts,
-  createProduct,
-  updateProduct,
-  deleteProduct
+import { 
+  listProducts, 
+  createProduct, 
+  updateProduct, 
+  deleteProduct 
 } from "../controllers/productsController.js";
-// Importando a proteção
 import { verifyToken, requireAdmin } from "../middlewares/authMiddleware.js";
 
 const router = express.Router();
 
-// Aberto ao público (Loja)
+// Aberto ao público (Vitrine da Loja)
 router.get("/", listProducts);
 
-// Protegido (Só Admin logado pode mexer no estoque/preço)
+// Protegido: Apenas Admin pode alterar o catálogo
 router.post("/", verifyToken, requireAdmin, createProduct);
 router.put("/:id", verifyToken, requireAdmin, updateProduct);
 router.delete("/:id", verifyToken, requireAdmin, deleteProduct);
