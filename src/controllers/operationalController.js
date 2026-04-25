@@ -4,7 +4,7 @@ export const getOperationalData = async (req, res) => {
   try {
     // 1. Buscar pedidos com pagamento confirmado (Regra de Negócio)
     const { data: orders, error: ordersError } = await supabase
-      .from("sales")
+      .from("orders")
       .select("*")
       .eq("status", "pago")
       .order("created_at", { ascending: false });
