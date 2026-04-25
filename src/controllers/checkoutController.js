@@ -95,7 +95,8 @@ export async function createPreference(req, res) {
         pending: `${baseUrl}/sucesso.html`
       },
       auto_return: "approved",
-      notification_url: `${req.protocol}://${req.get("host")}/api/payments/webhook`
+      // FIX: Agora usando env.backendUrl fixo para garantir que o MP sempre te encontre
+      notification_url: `${env.backendUrl}/api/checkout/webhook`
     };
 
     const response = await preferenceClient.create({ body: preferenceBody });
