@@ -4,81 +4,70 @@ import helmet from "helmet";
 import morgan from "morgan";
 import { env } from "./config/env.js";
 
-// Middlewares
-import { verifyToken, requireAdmin } from "./middlewares/authMiddleware.js";
-
-// Rotas
+// Importação das rotas
+import authRoutes from "./routes/authRoutes.js";
 import productRoutes from "./routes/productRoutes.js";
 import checkoutRoutes from "./routes/checkoutRoutes.js";
-import paymentRoutes from "./routes/paymentRoutes.js";
 import operationalRoutes from "./routes/operationalRoutes.js";
-import settingsRoutes from "./routes/settingsRoutes.js";
+import stockRoutes from "./routes/stockRoutes.js";
 import costRoutes from "./routes/costRoutes.js";
 import supplierRoutes from "./routes/supplierRoutes.js";
-import stockRoutes from "./routes/stockRoutes.js";
-import authRoutes from "./routes/authRoutes.js";
+import settingsRoutes from "./routes/settingsRoutes.js";
 
 const app = express();
 
-app.set("trust proxy", true);
+// 1. Configuração de Proxy (Essencial para Rate Limit no Render)
+app.set("trust proxy", 1);
 
-// Segurança e CORS
+// 2. Segurança de Headers
 app.use(helmet());
-app.use(cors({
-  origin: env.frontendUrl, // Agora restringindo ao seu domínio oficial
-  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"]
-}));
+app.use(morgan("dev"));
+app.use(express.json());
 
-// Logs baseados no ambiente
-app.use(morgan(env.isProduction ? "combined" : "dev"));
+// 3. FECHAMENTO DO CORS (Configuração Restritiva)
+const allowedOrigins = [
+  "https://www.tanamaofit.com.br",
+  "https://tanamaofit.com.br"
+];
 
-// Desativa logs de console comuns em produção para limpar o terminal do Render
-if (env.isProduction) {
-  console.log = () => {};
+// Adiciona localhost apenas se estiver em ambiente de desenvolvimento
+if (process.env.NODE_ENV !== "production") {
+  allowedOrigins.push("http://localhost:5500", "http://127.0.0.1:5500");
 }
 
-app.use(express.json({ limit: "50mb" }));
-app.use(express.urlencoded({ limit: "50mb", extended: true }));
+app.use(cors({
+  origin: function (origin, callback) {
+    // Permite requisições sem origin (como mobile apps ou ferramentas de teste tipo Postman) 
+    // ou se a origin estiver na lista permitida
+    if (!origin || allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      callback(new Error("Acesso negado pelo CORS: Origem não permitida."));
+    }
+  },
+  methods: ["GET", "POST", "PUT", "DELETE"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+  credentials: true
+}));
 
-// Rota de verificação de saúde do sistema
-app.get("/health", (_req, res) => {
-  res.json({ 
-    ok: true, 
-    environment: env.nodeEnv,
-    timestamp: new Date().toISOString()
-  });
-});
-
-// Definição das Rotas
+// 4. Rotas
 app.use("/api/auth", authRoutes);
 app.use("/api/products", productRoutes);
 app.use("/api/checkout", checkoutRoutes);
-app.use("/api/payments", paymentRoutes);
+app.use("/api/operations", operationalRoutes);
+app.use("/api/stock", stockRoutes);
+app.use("/api/costs", costRoutes);
+app.use("/api/suppliers", supplierRoutes);
+app.use("/api/settings", settingsRoutes);
 
-// Rotas protegidas (Operacional)
-app.use("/api/operations", verifyToken, operationalRoutes);
-app.use("/api/stock", verifyToken, stockRoutes);
+// Rota de saúde para o Render
+app.get("/health", (req, res) => res.status(200).send("OK"));
 
-// Rotas protegidas (Administrativo)
-app.use("/api/settings", verifyToken, requireAdmin, settingsRoutes);
-app.use("/api/costs", verifyToken, requireAdmin, costRoutes);
-app.use("/api/suppliers", verifyToken, requireAdmin, supplierRoutes);
-
-// Tratamento de erros global
-app.use((err, _req, res, _next) => {
-  console.error("[ERRO CRÍTICO]:", err.stack);
-  res.status(500).json({
-    ok: false,
-    message: env.isProduction ? "Erro interno no servidor." : err.message
-  });
+const PORT = process.env.PORT || 10000;
+app.listen(PORT, () => {
+  console.log(`==> Servidor Tanamao ativo em: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`==> Porta: ${PORT}`);
 });
-
-app.listen(env.port, () => {
-  console.info(`==> Servidor Tanamao ativo em: ${env.nodeEnv}`);
-  console.info(`==> Porta: ${env.port}`);
-});
-
 
 
 
