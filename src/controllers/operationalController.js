@@ -2,16 +2,16 @@ import { supabase } from "../config/supabase.js";
 
 export const getOperationalData = async (req, res) => {
   try {
-    // 1. Buscar pedidos pendentes e preparados para o Kanban
+    // 1. Buscar pedidos com pagamento confirmado (Regra de Negócio)
     const { data: orders, error: ordersError } = await supabase
       .from("sales")
       .select("*")
-      .in("status", ["pago", "preparando", "enviado"])
+      .eq("status", "pago")
       .order("created_at", { ascending: false });
 
     if (ordersError) throw ordersError;
 
-    // 2. Buscar resumo de estoque baixo (opcional para o painel)
+    // 2. Buscar resumo de estoque baixo
     const { data: lowStock, error: stockError } = await supabase
       .from("products")
       .select("name, stock_quantity")
@@ -19,11 +19,12 @@ export const getOperationalData = async (req, res) => {
 
     if (stockError) throw stockError;
 
+    // Retorno unificado para o Kanban
     return res.json({
       ok: true,
-      orders,
+      orders: orders || [],
       alerts: {
-        lowStock
+        lowStock: lowStock || []
       }
     });
   } catch (error) {
