@@ -6,35 +6,28 @@ import { env } from "../config/env.js";
 export const paymentWebhook = async (req, res) => {
   const { query, body, headers } = req;
   
-  // 1. Resposta imediata para evitar retentativas excessivas do Mercado Pago
+  // 1. Resposta rápida ao Mercado Pago
   res.status(200).send("OK");
 
   try {
     const paymentId = query["data.id"] || body?.data?.id;
     if (!paymentId) return;
 
-    // 2. Validação de Autenticidade (Segurança de Produção)
+    // 2. Validação de Autenticidade
     if (env.webhookSecret) {
       const signatureHeader = headers["x-signature"];
-      if (!signatureHeader) {
-        console.warn(`[Webhook] Assinatura ausente para pagamento ${paymentId}`);
-        return;
-      }
+      if (!signatureHeader) return;
 
       const parts = signatureHeader.split(",");
       const ts = parts.find(p => p.startsWith("ts="))?.split("=")[1];
       const v1 = parts.find(p => p.startsWith("v1="))?.split("=")[1];
-
       const manifest = `id:${paymentId};request-id:;ts:${ts};`;
       const hash = crypto.createHmac("sha256", env.webhookSecret).update(manifest).digest("hex");
 
-      if (hash !== v1) {
-        console.error(`[Webhook] Assinatura inválida para pagamento ${paymentId}`);
-        return;
-      }
+      if (hash !== v1) return;
     }
 
-    // 3. Buscar detalhes oficiais do pagamento
+    // 3. Buscar detalhes oficiais do pagamento no Mercado Pago
     const payment = await paymentClient.get({ id: paymentId });
 
     if (payment.status !== "approved") {
@@ -42,49 +35,19 @@ export const paymentWebhook = async (req, res) => {
       return;
     }
 
-    // 4. Checar se este pagamento já foi processado (Evita erro de estoque duplicado)
-    const { data: existingSale } = await supabase
-      .from("sales")
-      .select("status")
-      .eq("external_reference", payment.external_reference)
-      .single();
+    // 4. A "Mágica" acontece aqui:
+    // Enviamos o ID do pagamento, o ID do pedido e a lista de itens.
+    // O Supabase cuida da idempotência, do estoque e do status da venda.
+    const { error: rpcError } = await supabase.rpc("process_order_stock", {
+      p_payment_id: String(paymentId),
+      p_order_id: payment.external_reference,
+      p_items: payment.additional_info?.items // Formato: [{id: "...", quantity: 1}, ...]
+    });
 
-    if (existingSale?.status === "pago") {
-      console.info(`[Webhook] Pagamento ${paymentId} já processado anteriormente.`);
-      return;
-    }
-
-    console.info(`[Webhook] Processando baixa de estoque: Pedido ${payment.external_reference}`);
-
-    // 5. Recuperar itens e baixar estoque via RPC
-    const items = payment.additional_info?.items || [];
-    
-    for (const item of items) {
-      const { error: stockError } = await supabase.rpc("decrement_stock", {
-        p_product_id: item.id,
-        p_quantity: parseInt(item.quantity)
-      });
-
-      if (stockError) {
-        console.error(`[ERRO ESTOQUE] Item ${item.id}: ${stockError.message}`);
-        // Logar o erro em uma tabela de auditoria se necessário
-      }
-    }
-
-    // 6. Atualizar a venda para 'pago'
-    const { error: updateError } = await supabase
-      .from("sales")
-      .update({ 
-        status: "pago", 
-        updated_at: new Date().toISOString(),
-        payment_id: paymentId // Guardamos o ID do MP para referência
-      })
-      .eq("external_reference", payment.external_reference);
-
-    if (updateError) {
-      console.error(`[Webhook] Erro ao atualizar venda ${payment.external_reference}:`, updateError.message);
+    if (rpcError) {
+      console.error("[ERRO RPC]:", rpcError.message);
     } else {
-      console.info(`[Webhook] Venda ${payment.external_reference} finalizada com sucesso.`);
+      console.info(`[Webhook] Pedido ${payment.external_reference} processado com sucesso.`);
     }
 
   } catch (error) {
