@@ -7,6 +7,6 @@ const router = Router();
 // Proteção no topo do router
 router.use(verifyToken);
 
-router.get("/panel", getOperationalData);
+router.get("/painel", getOperationalData);
 
 export default router;
