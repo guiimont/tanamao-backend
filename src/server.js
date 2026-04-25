@@ -1,78 +1,82 @@
-import express from "express"; [cite: 508]
-import cors from "cors"; [cite: 508]
-import helmet from "helmet"; [cite: 508]
-import morgan from "morgan"; [cite: 508]
-import { env } from "./config/env.js"; [cite: 509]
+import express from "express";
+import cors from "cors";
+import helmet from "helmet";
+import morgan from "morgan";
+import { env } from "./config/env.js";
 
-// Middlewares de Segurança
-import { verifyToken, requireAdmin } from "./middlewares/authMiddleware.js"; [cite: 509]
+// Middlewares
+import { verifyToken, requireAdmin } from "./middlewares/authMiddleware.js";
 
 // Rotas
-import productRoutes from "./routes/productRoutes.js"; [cite: 510]
-import checkoutRoutes from "./routes/checkoutRoutes.js"; [cite: 510]
-import paymentRoutes from "./routes/paymentRoutes.js"; [cite: 510]
-import operationalRoutes from "./routes/operationalRoutes.js"; [cite: 510]
-import settingsRoutes from "./routes/settingsRoutes.js"; [cite: 510]
-import costRoutes from "./routes/costRoutes.js"; [cite: 511]
-import supplierRoutes from "./routes/supplierRoutes.js"; [cite: 511]
-import stockRoutes from "./routes/stockRoutes.js"; [cite: 511]
-import authRoutes from "./routes/authRoutes.js"; [cite: 511]
+import productRoutes from "./routes/productRoutes.js";
+import checkoutRoutes from "./routes/checkoutRoutes.js";
+import paymentRoutes from "./routes/paymentRoutes.js";
+import operationalRoutes from "./routes/operationalRoutes.js";
+import settingsRoutes from "./routes/settingsRoutes.js";
+import costRoutes from "./routes/costRoutes.js";
+import supplierRoutes from "./routes/supplierRoutes.js";
+import stockRoutes from "./routes/stockRoutes.js";
+import authRoutes from "./routes/authRoutes.js";
 
-const app = express(); [cite: 511]
+const app = express();
 
-app.set("trust proxy", true); [cite: 512]
-app.use(helmet()); [cite: 512]
+app.set("trust proxy", true);
+
+// Segurança e CORS
+app.use(helmet());
 app.use(cors({
-  origin: "*",
-  methods: ["GET","POST","PUT","PATCH","DELETE","OPTIONS"],
-  allowedHeaders: ["Content-Type","Authorization"]
-})); [cite: 512]
+  origin: env.frontendUrl, // Agora restringindo ao seu domínio oficial
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"]
+}));
 
-// LOGS CONDICIONAIS:
-// Em produção usa o formato 'combined' (padrão Apache, mais completo para análise de segurança)
-// Em desenvolvimento usa o 'dev' (colorido e simplificado)
-app.use(morgan(env.isProduction ? "combined" : "dev")); [cite: 512]
+// Logs baseados no ambiente
+app.use(morgan(env.isProduction ? "combined" : "dev"));
 
-// SILENCIADOR DE LOGS (Opcional):
-// Se quiser evitar que console.log poluam o log do Render em produção:
+// Desativa logs de console comuns em produção para limpar o terminal do Render
 if (env.isProduction) {
-  console.log = () => {}; 
-  // Mantemos o console.error e console.warn ativos para debug de problemas reais
+  console.log = () => {};
 }
 
-app.use(express.json({ limit: "50mb" })); [cite: 513]
-app.use(express.urlencoded({ limit: "50mb", extended: true })); [cite: 513]
+app.use(express.json({ limit: "50mb" }));
+app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
+// Rota de verificação de saúde do sistema
 app.get("/health", (_req, res) => {
-  res.json({ ok: true, env: env.nodeEnv }); [cite: 514]
+  res.json({ 
+    ok: true, 
+    environment: env.nodeEnv,
+    timestamp: new Date().toISOString()
+  });
 });
 
-// ROTAS PÚBLICAS
-app.use("/api/auth", authRoutes); [cite: 515]
-app.use("/api/products", productRoutes); [cite: 515]
-app.use("/api/checkout", checkoutRoutes); [cite: 515]
-app.use("/api/payments", paymentRoutes); [cite: 516]
+// Definição das Rotas
+app.use("/api/auth", authRoutes);
+app.use("/api/products", productRoutes);
+app.use("/api/checkout", checkoutRoutes);
+app.use("/api/payments", paymentRoutes);
 
-// ROTAS DE OPERAÇÃO
-app.use("/api/operations", verifyToken, operationalRoutes); [cite: 516]
-app.use("/api/stock", verifyToken, stockRoutes); [cite: 517]
+// Rotas protegidas (Operacional)
+app.use("/api/operations", verifyToken, operationalRoutes);
+app.use("/api/stock", verifyToken, stockRoutes);
 
-// ROTAS ADMINISTRATIVAS
-app.use("/api/settings", verifyToken, requireAdmin, settingsRoutes); [cite: 517]
-app.use("/api/costs", verifyToken, requireAdmin, costRoutes); [cite: 518]
-app.use("/api/suppliers", verifyToken, requireAdmin, supplierRoutes); [cite: 518]
+// Rotas protegidas (Administrativo)
+app.use("/api/settings", verifyToken, requireAdmin, settingsRoutes);
+app.use("/api/costs", verifyToken, requireAdmin, costRoutes);
+app.use("/api/suppliers", verifyToken, requireAdmin, supplierRoutes);
 
-// Middleware de erro global
+// Tratamento de erros global
 app.use((err, _req, res, _next) => {
-  console.error("[server:error]", err); [cite: 518]
-  return res.status(500).json({
+  console.error("[ERRO CRÍTICO]:", err.stack);
+  res.status(500).json({
     ok: false,
-    message: env.isProduction ? "internal_server_error" : err.message
+    message: env.isProduction ? "Erro interno no servidor." : err.message
   });
 });
 
 app.listen(env.port, () => {
-  console.log(`Backend rodando em modo ${env.nodeEnv} na porta ${env.port}`); [cite: 519]
+  console.info(`==> Servidor Tanamao ativo em: ${env.nodeEnv}`);
+  console.info(`==> Porta: ${env.port}`);
 });
 
 
