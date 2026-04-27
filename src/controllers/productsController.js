@@ -86,24 +86,55 @@ export async function createProduct(req, res) {
 export async function updateProduct(req, res) {
   try {
     const { id } = req.params;
-    const { name, description, price, image_url } = req.body;
 
-    // ✅ Otimiza a imagem antes de atualizar
-    const optimizedImageUrl = await optimizeImage(image_url);
+    const {
+      name,
+      description,
+      price,
+      image_url,
+      active,
+      sort_order,
+      stock_quantity
+    } = req.body;
 
-    const { error } = await supabase
+    // Só otimiza imagem se veio alguma imagem (senão não mexe)
+    const optimizedImageUrl = image_url ? await optimizeImage(image_url) : undefined;
+
+    const patch = {};
+
+    // Campos básicos
+    if (typeof name !== "undefined") patch.name = name;
+    if (typeof description !== "undefined") patch.description = description;
+    if (typeof price !== "undefined") patch.price = Number(price) || 0;
+
+    // Imagem (opcional)
+    if (typeof image_url !== "undefined") {
+      patch.image_url = optimizedImageUrl || null;
+    }
+
+    // Cardápio (opcional)
+    if (typeof active !== "undefined") patch.active = !!active;
+    if (typeof sort_order !== "undefined") patch.sort_order = Number(sort_order) || 0;
+
+    // Estoque (opcional)
+    if (typeof stock_quantity !== "undefined") {
+      const sq = Number(stock_quantity);
+      if (!Number.isFinite(sq) || sq < 0) {
+        return res.status(400).json({ ok: false, message: "stock_quantity inválido." });
+      }
+      patch.stock_quantity = Math.floor(sq);
+    }
+
+    const { data, error } = await supabase
       .from("products")
-      .update({
-        name,
-        description,
-        price: Number(price) || 0,
-        image_url: optimizedImageUrl
-      })
-      .eq("id", id);
+      .update(patch)
+      .eq("id", id)
+      .select("*")
+      .single();
 
     if (error) throw error;
 
-    return res.json({ ok: true });
+    return res.json({ ok: true, product: data });
   } catch (e) {
     console.error("[updateProduct]", e);
     return res.status(500).json({
@@ -112,7 +143,6 @@ export async function updateProduct(req, res) {
     });
   }
 }
-
 export async function deleteProduct(req, res) {
   try {
     const { id } = req.params;
