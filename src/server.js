@@ -45,7 +45,7 @@ app.use(cors({
       callback(new Error("Acesso negado pelo CORS: Origem não permitida."));
     }
   },
-  methods: ["GET", "POST", "PUT", "DELETE"],
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"],
   credentials: true
 }));
