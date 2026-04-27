@@ -5,7 +5,7 @@ export async function listStock(req, res) {
   const { data, error } = await supabase
     .from("stock_entries")
     .select(`*, suppliers(name)`)
-    .order("created_at", { ascending: false });
+    .order("entry_date", { ascending: false });
     
   if (error) return res.status(500).json({ ok: false, message: error.message });
   return res.json({ ok: true, entries: data });
