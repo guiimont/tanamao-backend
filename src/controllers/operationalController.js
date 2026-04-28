@@ -77,3 +77,29 @@ export const updateOrderStatus = async (req, res) => {
     });
   }
 };
+
+// NOVO: Iniciar Produção (baixa estoque no banco via RPC start_production)
+export const startProduction = async (req, res) => {
+  try {
+    const { id } = req.params; // orders.id (uuid)
+
+    const { data, error } = await supabase.rpc("start_production", {
+      p_order_id: id,
+    });
+
+    if (error) {
+      console.error("[startProduction rpc error]", error);
+      return res.status(422).json({ ok: false, message: error.message });
+    }
+
+    // "data" já é um jsonb retornado pela RPC, ex:
+    // { ok: true, delivery_status: "ready"|"preparing", issues: [...] }
+    return res.json(data);
+  } catch (e) {
+    console.error("[startProduction]", e?.message || e);
+    return res.status(500).json({
+      ok: false,
+      message: "Erro ao iniciar produção.",
+    });
+  }
+};
