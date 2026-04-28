@@ -1,15 +1,18 @@
 import { Router } from "express";
-import { getOperationalData, updateOrderStatus } from "../controllers/operationalController.js";
+import {
+  getOperationalData,
+  updateOrderStatus,
+  startProduction
+} from "../controllers/operationalController.js";
 import { verifyToken } from "../middlewares/authMiddleware.js";
 
 const router = Router();
-
-// Proteção no topo do router
 router.use(verifyToken);
 
 router.get("/orders", getOperationalData);
-
-// NOVO: atualizar status do pedido (kanban)
 router.patch("/orders/:id/status", updateOrderStatus);
+
+// NOVO
+router.post("/orders/:id/start-production", startProduction);
 
 export default router;
