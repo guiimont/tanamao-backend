@@ -2,6 +2,20 @@ import { supabase } from "../config/supabase.js";
 
 const PUBLIC_SETTINGS_KEYS = new Set(["site_content"]);
 
+function normalizeSettingsValue(value) {
+  if (typeof value !== "string") return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value;
+  }
+}
+
+function normalizeSettingsRow(row, key) {
+  if (!row) return { key, value: null };
+  return { ...row, value: normalizeSettingsValue(row.value) };
+}
+
 export async function getPublicSettings(req, res) {
   try {
     const { key } = req.params;
@@ -18,7 +32,7 @@ export async function getPublicSettings(req, res) {
 
     if (error) throw error;
 
-    return res.json({ ok: true, data: data || { key, value: null } });
+    return res.json({ ok: true, data: normalizeSettingsRow(data, key) });
   } catch (e) {
     console.error("[settings:public:get]", e);
     return res.status(500).json({ ok: false });
@@ -37,7 +51,7 @@ export async function getSettings(req, res) {
 
     if (error) throw error;
 
-    return res.json({ ok: true, data: data || { key, value: null } });
+    return res.json({ ok: true, data: normalizeSettingsRow(data, key) });
   } catch (e) {
     console.error("[settings:get]", e);
     return res.status(500).json({ ok: false });
