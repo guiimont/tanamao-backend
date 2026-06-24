@@ -23,7 +23,7 @@ alter table if exists orders
 
 create table if not exists product_daily_capacities (
   id uuid primary key default gen_random_uuid(),
-  product_id uuid not null references products(id) on delete cascade,
+  product_id text not null references products(id) on delete cascade,
   production_date date not null,
   max_units integer not null check (max_units >= 0),
   created_at timestamptz not null default now(),
@@ -47,7 +47,7 @@ create table if not exists payment_events (
 
 create table if not exists product_stock_movements (
   id uuid primary key default gen_random_uuid(),
-  product_id uuid not null references products(id) on delete cascade,
+  product_id text not null references products(id) on delete cascade,
   qty_delta integer not null,
   reason text not null,
   reference text,
@@ -155,9 +155,9 @@ begin
     v_qty := coalesce((v_item->>'quantity')::integer, 0);
 
     select *
-      into v_product
+     into v_product
       from products
-     where id = (v_item->>'id')::uuid
+     where id = v_item->>'id'
      for update;
 
     if found and v_qty > 0 then
