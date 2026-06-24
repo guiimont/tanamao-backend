@@ -45,7 +45,22 @@ export async function listProducts(req, res) {
 
 export async function createProduct(req, res) {
   try {
-    const { name, description, price, image_url } = req.body;
+    const {
+      name,
+      description,
+      price,
+      image_url,
+      category,
+      serving_size,
+      shelf_life_days,
+      storage_instructions,
+      lead_time_hours,
+      available_days,
+      max_units_per_day,
+      is_sellable,
+      is_gift_recipe,
+      weekly_guide_note
+    } = req.body;
 
     if (!name) {
       return res.status(400).json({
@@ -57,14 +72,27 @@ export async function createProduct(req, res) {
     // ✅ Otimiza a imagem antes de salvar
     const optimizedImageUrl = await optimizeImage(image_url);
 
+    const payload = {
+      name,
+      description: description || "",
+      price: Number(price) || 0,
+      image_url: optimizedImageUrl || null
+    };
+
+    if (typeof category !== "undefined") payload.category = category;
+    if (typeof serving_size !== "undefined") payload.serving_size = serving_size;
+    if (typeof shelf_life_days !== "undefined") payload.shelf_life_days = Number(shelf_life_days) || null;
+    if (typeof storage_instructions !== "undefined") payload.storage_instructions = storage_instructions;
+    if (typeof lead_time_hours !== "undefined") payload.lead_time_hours = Number(lead_time_hours) || 24;
+    if (Array.isArray(available_days)) payload.available_days = available_days;
+    if (typeof max_units_per_day !== "undefined") payload.max_units_per_day = Number(max_units_per_day) || null;
+    if (typeof is_sellable !== "undefined") payload.is_sellable = !!is_sellable;
+    if (typeof is_gift_recipe !== "undefined") payload.is_gift_recipe = !!is_gift_recipe;
+    if (typeof weekly_guide_note !== "undefined") payload.weekly_guide_note = weekly_guide_note;
+
     const { data, error } = await supabase
       .from("products")
-      .insert([{
-        name,
-        description: description || "",
-        price: Number(price) || 0,
-        image_url: optimizedImageUrl || null
-      }])
+      .insert([payload])
       .select()
       .single();
 
@@ -94,7 +122,17 @@ export async function updateProduct(req, res) {
       image_url,
       active,
       sort_order,
-      stock_quantity
+      stock_quantity,
+      category,
+      serving_size,
+      shelf_life_days,
+      storage_instructions,
+      lead_time_hours,
+      available_days,
+      max_units_per_day,
+      is_sellable,
+      is_gift_recipe,
+      weekly_guide_note
     } = req.body;
 
     // Só otimiza imagem se veio alguma imagem (senão não mexe)
@@ -115,6 +153,16 @@ export async function updateProduct(req, res) {
     // Cardápio (opcional)
     if (typeof active !== "undefined") patch.active = !!active;
     if (typeof sort_order !== "undefined") patch.sort_order = Number(sort_order) || 0;
+    if (typeof category !== "undefined") patch.category = category;
+    if (typeof serving_size !== "undefined") patch.serving_size = serving_size;
+    if (typeof shelf_life_days !== "undefined") patch.shelf_life_days = Number(shelf_life_days) || null;
+    if (typeof storage_instructions !== "undefined") patch.storage_instructions = storage_instructions;
+    if (typeof lead_time_hours !== "undefined") patch.lead_time_hours = Number(lead_time_hours) || 24;
+    if (Array.isArray(available_days)) patch.available_days = available_days;
+    if (typeof max_units_per_day !== "undefined") patch.max_units_per_day = Number(max_units_per_day) || null;
+    if (typeof is_sellable !== "undefined") patch.is_sellable = !!is_sellable;
+    if (typeof is_gift_recipe !== "undefined") patch.is_gift_recipe = !!is_gift_recipe;
+    if (typeof weekly_guide_note !== "undefined") patch.weekly_guide_note = weekly_guide_note;
 
     // Estoque (opcional)
     if (typeof stock_quantity !== "undefined") {

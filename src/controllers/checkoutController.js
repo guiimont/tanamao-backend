@@ -12,6 +12,82 @@ const getBaseUrl = () => {
   return url.replace(/\/$/, "");
 };
 
+const WEEKDAYS = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+const BUSINESS_ERROR_PATTERNS = [
+  "Produto ",
+  "Estoque ",
+  "indisponível",
+  "antecedência",
+  "Limite de produção"
+];
+
+function isBusinessError(error) {
+  return BUSINESS_ERROR_PATTERNS.some((pattern) => error?.message?.includes(pattern));
+}
+
+async function ensureScheduledCapacity({ items, productsMap, fulfillment }) {
+  if (!fulfillment?.scheduledDate) return;
+
+  const scheduledDate = fulfillment.scheduledDate;
+  const scheduledAt = new Date(`${scheduledDate}T12:00:00`);
+  const now = new Date();
+  const weekday = WEEKDAYS[scheduledAt.getDay()];
+  const ids = items.map((item) => item.id);
+
+  for (const item of items) {
+    const product = productsMap.get(item.id);
+    const availableDays = Array.isArray(product?.available_days) ? product.available_days : [];
+    if (availableDays.length && !availableDays.includes(weekday)) {
+      throw new Error(`Produto indisponível para a data escolhida: ${product.name}`);
+    }
+
+    const leadTimeHours = Number(product?.lead_time_hours || 0);
+    if (leadTimeHours > 0) {
+      const minimumDate = new Date(now.getTime() + leadTimeHours * 60 * 60 * 1000);
+      if (scheduledAt < minimumDate) {
+        throw new Error(`O produto ${product.name} exige ${leadTimeHours}h de antecedência.`);
+      }
+    }
+  }
+
+  const { data: capacities, error: capacityError } = await supabase
+    .from("product_daily_capacities")
+    .select("product_id, max_units")
+    .eq("production_date", scheduledDate)
+    .in("product_id", ids);
+
+  if (capacityError) throw capacityError;
+
+  const capacityMap = new Map((capacities || []).map((row) => [row.product_id, row.max_units]));
+
+  const { data: scheduledOrders, error: ordersError } = await supabase
+    .from("orders")
+    .select("items_json")
+    .eq("scheduled_delivery_date", scheduledDate)
+    .in("payment_status", ["pending", "approved"]);
+
+  if (ordersError) throw ordersError;
+
+  const reservedByProduct = new Map();
+  for (const order of scheduledOrders || []) {
+    for (const orderItem of order.items_json || []) {
+      const current = reservedByProduct.get(orderItem.id) || 0;
+      reservedByProduct.set(orderItem.id, current + Number(orderItem.quantity || 0));
+    }
+  }
+
+  for (const item of items) {
+    const product = productsMap.get(item.id);
+    const limit = Number(capacityMap.get(item.id) ?? product?.max_units_per_day ?? 0);
+    if (!limit) continue;
+
+    const reserved = reservedByProduct.get(item.id) || 0;
+    if (reserved + item.quantity > limit) {
+      throw new Error(`Limite de produção atingido para ${product.name} nesta data.`);
+    }
+  }
+}
+
 export async function createPreference(req, res) {
   try {
     const parsed = checkoutSchema.safeParse(req.body);
@@ -24,7 +100,7 @@ export async function createPreference(req, res) {
       });
     }
 
-    const { items, paymentMethod, customer, source } = parsed.data;
+    const { items, paymentMethod, customer, fulfillment, source } = parsed.data;
 
     // 1. BUSCA LIMITE DE PEDIDOS
     const { data: limitConfig } = await supabase
@@ -52,6 +128,7 @@ export async function createPreference(req, res) {
     const ids = items.map((item) => item.id);
     const productsMap = await getProductsMapByIds(ids);
     const order = buildOrderFromDatabase(items, productsMap, paymentMethod);
+    await ensureScheduledCapacity({ items, productsMap, fulfillment });
 
     // 2. BUSCA TAXAS DINÂMICAS
     const { data: feeConfig } = await supabase
@@ -95,13 +172,20 @@ export async function createPreference(req, res) {
         pending: `${baseUrl}/sucesso.html`
       },
       auto_return: "approved",
-      // FIX: Agora usando env.backendUrl fixo para garantir que o MP sempre te encontre
-      notification_url: `${env.backendUrl}/api/checkout/webhook`
+      notification_url: `${env.backendUrl}/api/payments/webhook`,
+      additional_info: {
+        items: order.detailedItems.map((item) => ({
+          id: item.id,
+          title: item.title,
+          quantity: item.quantity,
+          unit_price: item.unit_price
+        }))
+      }
     };
 
     const response = await preferenceClient.create({ body: preferenceBody });
 
-    await createOrder({
+    const orderPayload = {
       external_reference: externalReference,
       customer_name: customer.nome,
       customer_phone: customer.telefone,
@@ -118,7 +202,21 @@ export async function createPreference(req, res) {
       net_total: netTotal,
       items_json: order.detailedItems,
       source: source || "site"
-    });
+    };
+
+    if (fulfillment?.scheduledDate) {
+      orderPayload.scheduled_delivery_date = fulfillment.scheduledDate;
+    }
+
+    if (fulfillment?.deliveryWindow) {
+      orderPayload.delivery_window = fulfillment.deliveryWindow;
+    }
+
+    if (fulfillment?.type) {
+      orderPayload.fulfillment_type = fulfillment.type;
+    }
+
+    await createOrder(orderPayload);
 
     return res.status(201).json({
       ok: true,
@@ -127,12 +225,20 @@ export async function createPreference(req, res) {
       order: {
         total: order.total,
         paymentMethod,
+        fulfillment: fulfillment || null,
         items: order.detailedItems
       }
     });
 
   } catch (error) {
     console.error("[checkout:createPreference] Erro fatal:", error);
+    if (isBusinessError(error)) {
+      return res.status(400).json({
+        ok: false,
+        message: error.message
+      });
+    }
+
     return res.status(500).json({
       ok: false,
       message: "Erro ao processar seu pedido."
