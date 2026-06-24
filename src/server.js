@@ -14,6 +14,8 @@ import costRoutes from "./routes/costRoutes.js";
 import supplierRoutes from "./routes/supplierRoutes.js";
 import settingsRoutes from "./routes/settingsRoutes.js";
 import productionRoutes from "./routes/productionRoutes.js";
+import paymentRoutes from "./routes/paymentRoutes.js";
+import employeeRoutes from "./routes/employeeRoutes.js";
 
 const app = express();
 
@@ -55,11 +57,13 @@ app.use(cors({
 app.use("/api/auth", authRoutes);
 app.use("/api/products", productRoutes);
 app.use("/api/checkout", checkoutRoutes);
+app.use("/api/payments", paymentRoutes);
 app.use("/api/operations", operationalRoutes);
 app.use("/api/stock", stockRoutes);
 app.use("/api/costs", costRoutes);
 app.use("/api/suppliers", supplierRoutes);
 app.use("/api/settings", settingsRoutes);
+app.use("/api/employees", employeeRoutes);
 app.use("/api/operations/production", productionRoutes);
 
 // Rota de saúde para o Render
