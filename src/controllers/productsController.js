@@ -21,6 +21,40 @@ async function optimizeImage(base64Str) {
   }
 }
 
+function makeProductId(name) {
+  const slug = String(name || "produto")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 42) || "produto";
+
+  return `${slug}-${Date.now().toString(36)}`;
+}
+
+function parseDecimal(value, fallback = null) {
+  if (value === undefined || value === null || value === "") return fallback;
+  const normalized = typeof value === "string" ? value.trim().replace(",", ".") : value;
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function parseInteger(value, fallback = null) {
+  const parsed = parseDecimal(value, fallback);
+  return Number.isFinite(parsed) ? Math.floor(parsed) : fallback;
+}
+
+function parseBoolean(value, fallback = false) {
+  if (typeof value === "undefined") return fallback;
+  if (typeof value === "string") return value === "true";
+  return !!value;
+}
+
+function getErrorMessage(error, fallback) {
+  return error?.message ? `${fallback}: ${error.message}` : fallback;
+}
+
 export async function listProducts(req, res) {
   try {
     const { data, error } = await supabase
@@ -46,10 +80,14 @@ export async function listProducts(req, res) {
 export async function createProduct(req, res) {
   try {
     const {
+      id,
       name,
       description,
       price,
       image_url,
+      active,
+      sort_order,
+      stock_quantity,
       category,
       serving_size,
       shelf_life_days,
@@ -70,24 +108,36 @@ export async function createProduct(req, res) {
     }
 
     // ✅ Otimiza a imagem antes de salvar
+    const parsedPrice = parseDecimal(price, 0);
+    if (!Number.isFinite(parsedPrice) || parsedPrice < 0) {
+      return res.status(400).json({
+        ok: false,
+        message: "Preço inválido"
+      });
+    }
+
     const optimizedImageUrl = await optimizeImage(image_url);
 
     const payload = {
+      id: id || makeProductId(name),
       name,
       description: description || "",
-      price: Number(price) || 0,
-      image_url: optimizedImageUrl || null
+      price: parsedPrice,
+      image_url: optimizedImageUrl || null,
+      active: parseBoolean(active, true),
+      sort_order: parseInteger(sort_order, 0),
+      stock_quantity: parseInteger(stock_quantity, 0)
     };
 
     if (typeof category !== "undefined") payload.category = category;
     if (typeof serving_size !== "undefined") payload.serving_size = serving_size;
-    if (typeof shelf_life_days !== "undefined") payload.shelf_life_days = Number(shelf_life_days) || null;
+    if (typeof shelf_life_days !== "undefined") payload.shelf_life_days = parseInteger(shelf_life_days, null);
     if (typeof storage_instructions !== "undefined") payload.storage_instructions = storage_instructions;
-    if (typeof lead_time_hours !== "undefined") payload.lead_time_hours = Number(lead_time_hours) || 24;
+    if (typeof lead_time_hours !== "undefined") payload.lead_time_hours = parseInteger(lead_time_hours, 24);
     if (Array.isArray(available_days)) payload.available_days = available_days;
-    if (typeof max_units_per_day !== "undefined") payload.max_units_per_day = Number(max_units_per_day) || null;
-    if (typeof is_sellable !== "undefined") payload.is_sellable = !!is_sellable;
-    if (typeof is_gift_recipe !== "undefined") payload.is_gift_recipe = !!is_gift_recipe;
+    if (typeof max_units_per_day !== "undefined") payload.max_units_per_day = parseInteger(max_units_per_day, null);
+    if (typeof is_sellable !== "undefined") payload.is_sellable = parseBoolean(is_sellable);
+    if (typeof is_gift_recipe !== "undefined") payload.is_gift_recipe = parseBoolean(is_gift_recipe);
     if (typeof weekly_guide_note !== "undefined") payload.weekly_guide_note = weekly_guide_note;
 
     const { data, error } = await supabase
@@ -106,7 +156,7 @@ export async function createProduct(req, res) {
     console.error("[createProduct]", e);
     return res.status(500).json({
       ok: false,
-      message: "Erro ao criar produto"
+      message: getErrorMessage(e, "Erro ao criar produto")
     });
   }
 }
@@ -143,7 +193,13 @@ export async function updateProduct(req, res) {
     // Campos básicos
     if (typeof name !== "undefined") patch.name = name;
     if (typeof description !== "undefined") patch.description = description;
-    if (typeof price !== "undefined") patch.price = Number(price) || 0;
+    if (typeof price !== "undefined") {
+      const parsedPrice = parseDecimal(price, 0);
+      if (!Number.isFinite(parsedPrice) || parsedPrice < 0) {
+        return res.status(400).json({ ok: false, message: "Preço inválido" });
+      }
+      patch.price = parsedPrice;
+    }
 
     // Imagem (opcional)
     if (typeof image_url !== "undefined") {
@@ -151,22 +207,22 @@ export async function updateProduct(req, res) {
     }
 
     // Cardápio (opcional)
-    if (typeof active !== "undefined") patch.active = !!active;
-    if (typeof sort_order !== "undefined") patch.sort_order = Number(sort_order) || 0;
+    if (typeof active !== "undefined") patch.active = parseBoolean(active);
+    if (typeof sort_order !== "undefined") patch.sort_order = parseInteger(sort_order, 0);
     if (typeof category !== "undefined") patch.category = category;
     if (typeof serving_size !== "undefined") patch.serving_size = serving_size;
-    if (typeof shelf_life_days !== "undefined") patch.shelf_life_days = Number(shelf_life_days) || null;
+    if (typeof shelf_life_days !== "undefined") patch.shelf_life_days = parseInteger(shelf_life_days, null);
     if (typeof storage_instructions !== "undefined") patch.storage_instructions = storage_instructions;
-    if (typeof lead_time_hours !== "undefined") patch.lead_time_hours = Number(lead_time_hours) || 24;
+    if (typeof lead_time_hours !== "undefined") patch.lead_time_hours = parseInteger(lead_time_hours, 24);
     if (Array.isArray(available_days)) patch.available_days = available_days;
-    if (typeof max_units_per_day !== "undefined") patch.max_units_per_day = Number(max_units_per_day) || null;
-    if (typeof is_sellable !== "undefined") patch.is_sellable = !!is_sellable;
-    if (typeof is_gift_recipe !== "undefined") patch.is_gift_recipe = !!is_gift_recipe;
+    if (typeof max_units_per_day !== "undefined") patch.max_units_per_day = parseInteger(max_units_per_day, null);
+    if (typeof is_sellable !== "undefined") patch.is_sellable = parseBoolean(is_sellable);
+    if (typeof is_gift_recipe !== "undefined") patch.is_gift_recipe = parseBoolean(is_gift_recipe);
     if (typeof weekly_guide_note !== "undefined") patch.weekly_guide_note = weekly_guide_note;
 
     // Estoque (opcional)
     if (typeof stock_quantity !== "undefined") {
-      const sq = Number(stock_quantity);
+      const sq = parseInteger(stock_quantity, null);
       if (!Number.isFinite(sq) || sq < 0) {
         return res.status(400).json({ ok: false, message: "stock_quantity inválido." });
       }
@@ -187,7 +243,7 @@ export async function updateProduct(req, res) {
     console.error("[updateProduct]", e);
     return res.status(500).json({
       ok: false,
-      message: "Erro ao atualizar"
+      message: getErrorMessage(e, "Erro ao atualizar")
     });
   }
 }
