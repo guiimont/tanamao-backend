@@ -136,6 +136,72 @@ export async function listAdminProducts(req, res) {
   }
 }
 
+export async function listReplenishmentRequests(req, res) {
+  try {
+    const status = String(req.query.status || "open").toLowerCase();
+    let query = supabase
+      .from("replenishment_requests")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (status !== "all") {
+      query = query.eq("status", status);
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    return res.json({
+      ok: true,
+      requests: data || []
+    });
+  } catch (e) {
+    console.error("[listReplenishmentRequests]", e);
+    return res.status(500).json({
+      ok: false,
+      message: getErrorMessage(e, "Erro ao listar reposições")
+    });
+  }
+}
+
+export async function resolveReplenishmentRequest(req, res) {
+  try {
+    const { id } = req.params;
+    const status = String(req.body?.status || "resolved").toLowerCase();
+
+    if (!["resolved", "canceled"].includes(status)) {
+      return res.status(400).json({
+        ok: false,
+        message: "Status inválido para reposição."
+      });
+    }
+
+    const { data, error } = await supabase
+      .from("replenishment_requests")
+      .update({
+        status,
+        resolved_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      })
+      .eq("id", id)
+      .select("*")
+      .single();
+
+    if (error) throw error;
+
+    return res.json({
+      ok: true,
+      request: data
+    });
+  } catch (e) {
+    console.error("[resolveReplenishmentRequest]", e);
+    return res.status(500).json({
+      ok: false,
+      message: getErrorMessage(e, "Erro ao atualizar reposição")
+    });
+  }
+}
+
 export async function createProduct(req, res) {
   try {
     const {
@@ -158,7 +224,9 @@ export async function createProduct(req, res) {
       is_gift_recipe,
       weekly_guide_note,
       ingredients,
-      preparation_method
+      preparation_method,
+      reorder_min_quantity,
+      reorder_quantity
     } = req.body;
 
     if (!name) {
@@ -202,6 +270,8 @@ export async function createProduct(req, res) {
     if (typeof weekly_guide_note !== "undefined") payload.weekly_guide_note = weekly_guide_note;
     if (typeof ingredients !== "undefined") payload.ingredients = ingredients;
     if (typeof preparation_method !== "undefined") payload.preparation_method = preparation_method;
+    if (typeof reorder_min_quantity !== "undefined") payload.reorder_min_quantity = parseInteger(reorder_min_quantity, 0);
+    if (typeof reorder_quantity !== "undefined") payload.reorder_quantity = parseInteger(reorder_quantity, 0);
 
     const { data, error } = await supabase
       .from("products")
@@ -247,7 +317,9 @@ export async function updateProduct(req, res) {
       is_gift_recipe,
       weekly_guide_note,
       ingredients,
-      preparation_method
+      preparation_method,
+      reorder_min_quantity,
+      reorder_quantity
     } = req.body;
 
     // Só otimiza imagem se veio alguma imagem (senão não mexe)
@@ -286,6 +358,8 @@ export async function updateProduct(req, res) {
     if (typeof weekly_guide_note !== "undefined") patch.weekly_guide_note = weekly_guide_note;
     if (typeof ingredients !== "undefined") patch.ingredients = ingredients;
     if (typeof preparation_method !== "undefined") patch.preparation_method = preparation_method;
+    if (typeof reorder_min_quantity !== "undefined") patch.reorder_min_quantity = parseInteger(reorder_min_quantity, 0);
+    if (typeof reorder_quantity !== "undefined") patch.reorder_quantity = parseInteger(reorder_quantity, 0);
 
     // Estoque (opcional)
     if (typeof stock_quantity !== "undefined") {

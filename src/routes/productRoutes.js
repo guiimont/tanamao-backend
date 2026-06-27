@@ -2,6 +2,8 @@ import express from "express";
 import {
   listProducts,
   listAdminProducts,
+  listReplenishmentRequests,
+  resolveReplenishmentRequest,
   createProduct,
   updateProduct,
   deleteProduct
@@ -15,6 +17,8 @@ router.get("/", listProducts);
 
 // Full catalog for the operational panel.
 router.get("/admin", verifyToken, requireAdmin, listAdminProducts);
+router.get("/replenishment", verifyToken, requireAdmin, listReplenishmentRequests);
+router.patch("/replenishment/:id", verifyToken, requireAdmin, resolveReplenishmentRequest);
 
 // Admin-only catalog mutations.
 router.post("/", verifyToken, requireAdmin, createProduct);
