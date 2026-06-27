@@ -256,14 +256,36 @@ export async function deleteProduct(req, res) {
       .delete()
       .eq("id", id);
 
-    if (error) throw error;
+    if (!error) {
+      return res.json({ ok: true, deleted: true });
+    }
 
-    return res.json({ ok: true });
+    console.warn("[deleteProduct] hard delete failed, archiving product instead", error);
+
+    const { data, error: archiveError } = await supabase
+      .from("products")
+      .update({
+        active: false,
+        is_sellable: false
+      })
+      .eq("id", id)
+      .select("id")
+      .single();
+
+    if (archiveError) throw archiveError;
+
+    return res.json({
+      ok: true,
+      deleted: false,
+      archived: true,
+      product: data,
+      message: "Produto removido do cardápio e arquivado para preservar o histórico."
+    });
   } catch (e) {
     console.error("[deleteProduct]", e);
     return res.status(500).json({
       ok: false,
-      message: "Erro ao deletar"
+      message: getErrorMessage(e, "Erro ao deletar")
     });
   }
 }
