@@ -55,7 +55,66 @@ function getErrorMessage(error, fallback) {
   return error?.message ? `${fallback}: ${error.message}` : fallback;
 }
 
+function isPublicRecipeProduct(product) {
+  const category = String(product?.category || "").toLowerCase();
+  return product?.active !== false
+    && product?.is_sellable === false
+    && (product?.is_gift_recipe === true || category === "brinde");
+}
+
+function sanitizePublicProduct(product) {
+  const publicProduct = {
+    id: product.id,
+    name: product.name,
+    description: product.description,
+    price: product.price,
+    image_url: product.image_url,
+    active: product.active,
+    sort_order: product.sort_order,
+    category: product.category,
+    serving_size: product.serving_size,
+    shelf_life_days: product.shelf_life_days,
+    storage_instructions: product.storage_instructions,
+    lead_time_hours: product.lead_time_hours,
+    available_days: product.available_days,
+    max_units_per_day: product.max_units_per_day,
+    is_sellable: product.is_sellable,
+    is_gift_recipe: product.is_gift_recipe,
+    weekly_guide_note: product.weekly_guide_note
+  };
+
+  if (isPublicRecipeProduct(product)) {
+    publicProduct.ingredients = product.ingredients || "";
+    publicProduct.preparation_method = product.preparation_method || "";
+  }
+
+  return publicProduct;
+}
+
 export async function listProducts(req, res) {
+  try {
+    const { data, error } = await supabase
+      .from("products")
+      .select("id, name, description, price, image_url, active, sort_order, category, serving_size, shelf_life_days, storage_instructions, lead_time_hours, available_days, max_units_per_day, is_sellable, is_gift_recipe, weekly_guide_note, ingredients, preparation_method")
+      .eq("active", true)
+      .order("sort_order", { ascending: true });
+
+    if (error) throw error;
+
+    return res.json({
+      ok: true,
+      products: (data || []).map(sanitizePublicProduct)
+    });
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({
+      ok: false,
+      message: "Erro ao listar produtos"
+    });
+  }
+}
+
+export async function listAdminProducts(req, res) {
   try {
     const { data, error } = await supabase
       .from("products")
@@ -97,7 +156,9 @@ export async function createProduct(req, res) {
       max_units_per_day,
       is_sellable,
       is_gift_recipe,
-      weekly_guide_note
+      weekly_guide_note,
+      ingredients,
+      preparation_method
     } = req.body;
 
     if (!name) {
@@ -139,6 +200,8 @@ export async function createProduct(req, res) {
     if (typeof is_sellable !== "undefined") payload.is_sellable = parseBoolean(is_sellable);
     if (typeof is_gift_recipe !== "undefined") payload.is_gift_recipe = parseBoolean(is_gift_recipe);
     if (typeof weekly_guide_note !== "undefined") payload.weekly_guide_note = weekly_guide_note;
+    if (typeof ingredients !== "undefined") payload.ingredients = ingredients;
+    if (typeof preparation_method !== "undefined") payload.preparation_method = preparation_method;
 
     const { data, error } = await supabase
       .from("products")
@@ -182,7 +245,9 @@ export async function updateProduct(req, res) {
       max_units_per_day,
       is_sellable,
       is_gift_recipe,
-      weekly_guide_note
+      weekly_guide_note,
+      ingredients,
+      preparation_method
     } = req.body;
 
     // Só otimiza imagem se veio alguma imagem (senão não mexe)
@@ -219,6 +284,8 @@ export async function updateProduct(req, res) {
     if (typeof is_sellable !== "undefined") patch.is_sellable = parseBoolean(is_sellable);
     if (typeof is_gift_recipe !== "undefined") patch.is_gift_recipe = parseBoolean(is_gift_recipe);
     if (typeof weekly_guide_note !== "undefined") patch.weekly_guide_note = weekly_guide_note;
+    if (typeof ingredients !== "undefined") patch.ingredients = ingredients;
+    if (typeof preparation_method !== "undefined") patch.preparation_method = preparation_method;
 
     // Estoque (opcional)
     if (typeof stock_quantity !== "undefined") {
@@ -266,7 +333,9 @@ export async function deleteProduct(req, res) {
       .from("products")
       .update({
         active: false,
-        is_sellable: false
+        is_sellable: false,
+        is_gift_recipe: false,
+        category: "arquivado"
       })
       .eq("id", id)
       .select("id")

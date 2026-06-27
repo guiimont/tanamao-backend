@@ -1,22 +1,24 @@
 import express from "express";
-import { 
-  listProducts, 
-  createProduct, 
-  updateProduct, 
-  deleteProduct 
+import {
+  listProducts,
+  listAdminProducts,
+  createProduct,
+  updateProduct,
+  deleteProduct
 } from "../controllers/productsController.js";
 import { verifyToken, requireAdmin } from "../middlewares/authMiddleware.js";
 
 const router = express.Router();
 
-// Aberto ao público (Vitrine da Loja)
+// Public storefront list. Internal recipe fields are sanitized here.
 router.get("/", listProducts);
 
-// Protegido: Apenas Admin pode alterar o catálogo
+// Full catalog for the operational panel.
+router.get("/admin", verifyToken, requireAdmin, listAdminProducts);
+
+// Admin-only catalog mutations.
 router.post("/", verifyToken, requireAdmin, createProduct);
 router.put("/:id", verifyToken, requireAdmin, updateProduct);
 router.delete("/:id", verifyToken, requireAdmin, deleteProduct);
 
 export default router;
-
-
