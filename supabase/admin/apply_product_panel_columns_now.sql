@@ -1,9 +1,36 @@
--- Product replenishment controls.
--- Opens a replenishment request when sellable product stock reaches its configured minimum.
+-- Run this in the Supabase SQL Editor if product editing shows a schema cache error,
+-- for example:
+-- "Could not find the 'reorder_min_quantity' column of 'products' in the schema cache"
+--
+-- This script adds the product fields used by the current admin panel and reloads
+-- the PostgREST schema cache.
 
 alter table if exists products
+  add column if not exists stock_quantity integer default 0,
+  add column if not exists category text,
+  add column if not exists serving_size text,
+  add column if not exists shelf_life_days integer,
+  add column if not exists storage_instructions text,
+  add column if not exists lead_time_hours integer default 24,
+  add column if not exists available_days text[] default array[]::text[],
+  add column if not exists max_units_per_day integer,
+  add column if not exists is_sellable boolean default true,
+  add column if not exists is_gift_recipe boolean default false,
+  add column if not exists weekly_guide_note text,
+  add column if not exists usage_contexts text[] not null default array[]::text[],
+  add column if not exists ingredients text,
+  add column if not exists preparation_method text,
   add column if not exists reorder_min_quantity integer default 0 check (reorder_min_quantity >= 0),
   add column if not exists reorder_quantity integer default 0 check (reorder_quantity >= 0);
+
+comment on column products.usage_contexts is
+  'Icon guide tags: breakfast, work, lunch_dinner, quick_snack.';
+
+comment on column products.ingredients is
+  'Ingredients / product formula. Public only for free recipe products.';
+
+comment on column products.preparation_method is
+  'Preparation method. Public only for free recipe products.';
 
 create table if not exists replenishment_requests (
   id uuid primary key default gen_random_uuid(),
@@ -84,34 +111,10 @@ after insert or update of stock_quantity, reorder_min_quantity, reorder_quantity
 for each row
 execute function sync_product_replenishment_request();
 
-insert into replenishment_requests(
-  product_id,
-  product_name,
-  current_stock,
-  reorder_min_quantity,
-  suggested_quantity,
-  status,
-  source
-)
-select
-  id,
-  coalesce(name, id),
-  coalesce(stock_quantity, 0),
-  coalesce(reorder_min_quantity, 0),
-  greatest(coalesce(reorder_quantity, 0), coalesce(reorder_min_quantity, 0) - coalesce(stock_quantity, 0), 1),
-  'open',
-  'migration_seed'
-from products
-where coalesce(active, true)
-  and coalesce(is_sellable, true)
-  and coalesce(reorder_min_quantity, 0) > 0
-  and coalesce(stock_quantity, 0) <= coalesce(reorder_min_quantity, 0)
-on conflict (product_id) where status = 'open'
-do update set
-  product_name = excluded.product_name,
-  current_stock = excluded.current_stock,
-  reorder_min_quantity = excluded.reorder_min_quantity,
-  suggested_quantity = excluded.suggested_quantity,
-  updated_at = now();
+alter table if exists orders
+  add column if not exists weekly_context_report jsonb not null default '{}'::jsonb;
+
+comment on column orders.weekly_context_report is
+  'Snapshot generated at checkout showing weekly eating contexts covered and suggested complements.';
 
 notify pgrst, 'reload schema';

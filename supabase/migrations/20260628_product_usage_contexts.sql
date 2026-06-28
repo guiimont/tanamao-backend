@@ -12,3 +12,5 @@ alter table if exists orders
 
 comment on column orders.weekly_context_report is
   'Snapshot generated at checkout showing weekly eating contexts covered and suggested complements.';
+
+notify pgrst, 'reload schema';

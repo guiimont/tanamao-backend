@@ -8,3 +8,5 @@ alter table if exists products
 
 comment on column products.ingredients is 'Ingredients / product formula. Public only for free recipe products.';
 comment on column products.preparation_method is 'Preparation method. Public only for free recipe products.';
+
+notify pgrst, 'reload schema';
