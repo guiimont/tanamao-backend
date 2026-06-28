@@ -1,5 +1,7 @@
--- Structured production ingredients and bill of materials.
--- Enables internal shopping lists based on planned production quantities.
+-- Run this in the Supabase SQL Editor if the panel shows:
+-- "Could not find the table 'public.production_ingredients' in the schema cache"
+--
+-- This script is idempotent and ends by asking PostgREST to reload the schema cache.
 
 create table if not exists production_ingredients (
   id uuid primary key default gen_random_uuid(),
@@ -14,6 +16,17 @@ create table if not exists production_ingredients (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table production_ingredients
+  add column if not exists category text,
+  add column if not exists unit_type text not null default 'un',
+  add column if not exists supplier_id text,
+  add column if not exists current_stock numeric(12, 3) not null default 0,
+  add column if not exists reorder_min_quantity numeric(12, 3) not null default 0,
+  add column if not exists notes text,
+  add column if not exists active boolean not null default true,
+  add column if not exists created_at timestamptz not null default now(),
+  add column if not exists updated_at timestamptz not null default now();
 
 create index if not exists idx_production_ingredients_active_name
   on production_ingredients(active, name);
