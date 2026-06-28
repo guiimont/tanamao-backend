@@ -201,6 +201,7 @@ export async function createPreference(req, res) {
       gateway_fee: gatewayFee,
       net_total: netTotal,
       items_json: order.detailedItems,
+      weekly_context_report: order.weeklyContextReport,
       source: source || "site"
     };
 
@@ -226,7 +227,8 @@ export async function createPreference(req, res) {
         total: order.total,
         paymentMethod,
         fulfillment: fulfillment || null,
-        items: order.detailedItems
+        items: order.detailedItems,
+        weeklyContextReport: order.weeklyContextReport
       }
     });
 

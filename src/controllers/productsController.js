@@ -51,6 +51,13 @@ function parseBoolean(value, fallback = false) {
   return !!value;
 }
 
+const USAGE_CONTEXTS = new Set(["breakfast", "work", "lunch_dinner", "quick_snack"]);
+
+function normalizeUsageContexts(value) {
+  if (!Array.isArray(value)) return [];
+  return [...new Set(value.map((item) => String(item || "").trim()).filter((item) => USAGE_CONTEXTS.has(item)))];
+}
+
 function getErrorMessage(error, fallback) {
   return error?.message ? `${fallback}: ${error.message}` : fallback;
 }
@@ -80,7 +87,8 @@ function sanitizePublicProduct(product) {
     max_units_per_day: product.max_units_per_day,
     is_sellable: product.is_sellable,
     is_gift_recipe: product.is_gift_recipe,
-    weekly_guide_note: product.weekly_guide_note
+    weekly_guide_note: product.weekly_guide_note,
+    usage_contexts: normalizeUsageContexts(product.usage_contexts)
   };
 
   if (isPublicRecipeProduct(product)) {
@@ -95,7 +103,7 @@ export async function listProducts(req, res) {
   try {
     const { data, error } = await supabase
       .from("products")
-      .select("id, name, description, price, image_url, active, sort_order, category, serving_size, shelf_life_days, storage_instructions, lead_time_hours, available_days, max_units_per_day, is_sellable, is_gift_recipe, weekly_guide_note, ingredients, preparation_method")
+      .select("id, name, description, price, image_url, active, sort_order, category, serving_size, shelf_life_days, storage_instructions, lead_time_hours, available_days, max_units_per_day, is_sellable, is_gift_recipe, weekly_guide_note, usage_contexts, ingredients, preparation_method")
       .eq("active", true)
       .order("sort_order", { ascending: true });
 
@@ -223,6 +231,7 @@ export async function createProduct(req, res) {
       is_sellable,
       is_gift_recipe,
       weekly_guide_note,
+      usage_contexts,
       ingredients,
       preparation_method,
       reorder_min_quantity,
@@ -268,6 +277,7 @@ export async function createProduct(req, res) {
     if (typeof is_sellable !== "undefined") payload.is_sellable = parseBoolean(is_sellable);
     if (typeof is_gift_recipe !== "undefined") payload.is_gift_recipe = parseBoolean(is_gift_recipe);
     if (typeof weekly_guide_note !== "undefined") payload.weekly_guide_note = weekly_guide_note;
+    if (typeof usage_contexts !== "undefined") payload.usage_contexts = normalizeUsageContexts(usage_contexts);
     if (typeof ingredients !== "undefined") payload.ingredients = ingredients;
     if (typeof preparation_method !== "undefined") payload.preparation_method = preparation_method;
     if (typeof reorder_min_quantity !== "undefined") payload.reorder_min_quantity = parseInteger(reorder_min_quantity, 0);
@@ -316,6 +326,7 @@ export async function updateProduct(req, res) {
       is_sellable,
       is_gift_recipe,
       weekly_guide_note,
+      usage_contexts,
       ingredients,
       preparation_method,
       reorder_min_quantity,
@@ -356,6 +367,7 @@ export async function updateProduct(req, res) {
     if (typeof is_sellable !== "undefined") patch.is_sellable = parseBoolean(is_sellable);
     if (typeof is_gift_recipe !== "undefined") patch.is_gift_recipe = parseBoolean(is_gift_recipe);
     if (typeof weekly_guide_note !== "undefined") patch.weekly_guide_note = weekly_guide_note;
+    if (typeof usage_contexts !== "undefined") patch.usage_contexts = normalizeUsageContexts(usage_contexts);
     if (typeof ingredients !== "undefined") patch.ingredients = ingredients;
     if (typeof preparation_method !== "undefined") patch.preparation_method = preparation_method;
     if (typeof reorder_min_quantity !== "undefined") patch.reorder_min_quantity = parseInteger(reorder_min_quantity, 0);
