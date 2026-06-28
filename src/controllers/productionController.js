@@ -88,8 +88,8 @@ function normalizeIngredientRows(rows = []) {
   });
 }
 
-function selectIngredientWithSupplier() {
-  return "*, suppliers(name)";
+function selectIngredientFields() {
+  return "id, name, category, unit_type, supplier_id, current_stock, reorder_min_quantity, notes, active, created_at, updated_at";
 }
 
 async function findIngredientByName(name) {
@@ -98,10 +98,57 @@ async function findIngredientByName(name) {
 
   const { data, error } = await supabase
     .from("production_ingredients")
-    .select(selectIngredientWithSupplier());
+    .select(selectIngredientFields());
 
   if (error) throw error;
   return (data || []).find((item) => normalizeIngredientName(item.name) === normalized) || null;
+}
+
+async function getSupplierNameMap(supplierIds = []) {
+  const ids = [...new Set((supplierIds || []).filter(Boolean))];
+  if (!ids.length) return new Map();
+
+  const { data, error } = await supabase
+    .from("suppliers")
+    .select("id, name")
+    .in("id", ids);
+
+  if (error) throw error;
+  return new Map((data || []).map((supplier) => [String(supplier.id), supplier.name]));
+}
+
+async function attachSuppliersToIngredients(ingredients = []) {
+  const list = (ingredients || []).filter(Boolean).map((item) => ({
+    ...item,
+    unit_type: normalizeUnit(item.unit_type)
+  }));
+  const supplierMap = await getSupplierNameMap(list.map((item) => item.supplier_id));
+
+  return list.map((item) => ({
+    ...item,
+    suppliers: item.supplier_id ? { name: supplierMap.get(String(item.supplier_id)) || null } : null
+  }));
+}
+
+async function attachSuppliersToRequirementRows(rows = []) {
+  const list = normalizeIngredientRows(rows || []);
+  const ingredients = list
+    .map((row) => row.production_ingredients)
+    .filter(Boolean);
+  const supplierMap = await getSupplierNameMap(ingredients.map((item) => item.supplier_id));
+
+  return list.map((row) => {
+    if (!row.production_ingredients) return row;
+    return {
+      ...row,
+      production_ingredients: {
+        ...row.production_ingredients,
+        suppliers: row.production_ingredients.supplier_id
+          ? { name: supplierMap.get(String(row.production_ingredients.supplier_id)) || null }
+          : null
+      }
+    };
+  });
 }
 
 function validateNonNegative(value, fieldName) {
@@ -182,7 +229,7 @@ export async function listIngredients(req, res) {
     const includeInactive = String(req.query.include_inactive || "false") === "true";
     let query = supabase
       .from("production_ingredients")
-      .select(selectIngredientWithSupplier())
+      .select(selectIngredientFields())
       .order("name", { ascending: true });
 
     if (!includeInactive) query = query.eq("active", true);
@@ -190,10 +237,7 @@ export async function listIngredients(req, res) {
     const { data, error } = await query;
     if (error) throw error;
 
-    const ingredients = (data || []).map((item) => ({
-      ...item,
-      unit_type: normalizeUnit(item.unit_type)
-    }));
+    const ingredients = await attachSuppliersToIngredients(data || []);
 
     return res.json({ ok: true, ingredients });
   } catch (error) {
@@ -213,10 +257,11 @@ export async function createIngredient(req, res) {
 
     if (existing) {
       if (existing.active !== false) {
+        const [ingredient] = await attachSuppliersToIngredients([existing]);
         return res.json({
           ok: true,
           created: false,
-          ingredient: { ...existing, unit_type: normalizeUnit(existing.unit_type) }
+          ingredient
         });
       }
 
@@ -224,15 +269,16 @@ export async function createIngredient(req, res) {
         .from("production_ingredients")
         .update({ active: true, updated_at: new Date().toISOString() })
         .eq("id", existing.id)
-        .select(selectIngredientWithSupplier())
+        .select(selectIngredientFields())
         .single();
 
       if (error) throw error;
+      const [ingredient] = await attachSuppliersToIngredients([data]);
 
       return res.json({
         ok: true,
         created: false,
-        ingredient: { ...data, unit_type: normalizeUnit(data.unit_type) }
+        ingredient
       });
     }
 
@@ -250,12 +296,13 @@ export async function createIngredient(req, res) {
     const { data, error } = await supabase
       .from("production_ingredients")
       .insert([payload])
-      .select(selectIngredientWithSupplier())
+      .select(selectIngredientFields())
       .single();
 
     if (error) throw error;
+    const [ingredient] = await attachSuppliersToIngredients([data]);
 
-    return res.status(201).json({ ok: true, created: true, ingredient: { ...data, unit_type: normalizeUnit(data.unit_type) } });
+    return res.status(201).json({ ok: true, created: true, ingredient });
   } catch (error) {
     console.error("[createIngredient]", error);
     return res.status(error.statusCode || 500).json({ ok: false, message: formatError(error, "Erro ao criar insumo") });
@@ -285,12 +332,13 @@ export async function updateIngredient(req, res) {
       .from("production_ingredients")
       .update(patch)
       .eq("id", id)
-      .select(selectIngredientWithSupplier())
+      .select(selectIngredientFields())
       .single();
 
     if (error) throw error;
+    const [ingredient] = await attachSuppliersToIngredients([data]);
 
-    return res.json({ ok: true, ingredient: { ...data, unit_type: normalizeUnit(data.unit_type) } });
+    return res.json({ ok: true, ingredient });
   } catch (error) {
     console.error("[updateIngredient]", error);
     return res.status(error.statusCode || 500).json({ ok: false, message: formatError(error, "Erro ao atualizar insumo") });
@@ -321,13 +369,14 @@ export async function listProductIngredients(req, res) {
     const { productId } = req.params;
     const { data, error } = await supabase
       .from("product_ingredient_requirements")
-      .select("id, product_id, ingredient_id, quantity_per_unit, unit_type, notes, production_ingredients(id, name, category, unit_type, current_stock, supplier_id, suppliers(name))")
+      .select("id, product_id, ingredient_id, quantity_per_unit, unit_type, notes, production_ingredients(id, name, category, unit_type, current_stock, supplier_id)")
       .eq("product_id", productId)
       .order("created_at", { ascending: true });
 
     if (error) throw error;
+    const items = await attachSuppliersToRequirementRows(data || []);
 
-    return res.json({ ok: true, items: normalizeIngredientRows(data || []) });
+    return res.json({ ok: true, items });
   } catch (error) {
     console.error("[listProductIngredients]", error);
     return res.status(500).json({ ok: false, message: formatError(error, "Erro ao listar ficha técnica") });
@@ -400,15 +449,16 @@ export async function generateShoppingList(req, res) {
 
     const { data: requirements, error: requirementsError } = await supabase
       .from("product_ingredient_requirements")
-      .select("product_id, ingredient_id, quantity_per_unit, unit_type, production_ingredients(id, name, category, unit_type, current_stock, supplier_id, suppliers(name))")
+      .select("product_id, ingredient_id, quantity_per_unit, unit_type, production_ingredients(id, name, category, unit_type, current_stock, supplier_id)")
       .in("product_id", productIds);
 
     if (requirementsError) throw requirementsError;
+    const requirementRows = await attachSuppliersToRequirementRows(requirements || []);
 
     const requirementsByProduct = new Map();
     const listByKey = new Map();
 
-    for (const requirement of requirements || []) {
+    for (const requirement of requirementRows || []) {
       const productQty = quantityByProduct.get(requirement.product_id) || 0;
       const ingredient = requirement.production_ingredients || {};
       const stockUnit = normalizeUnit(ingredient.unit_type);
