@@ -7,8 +7,110 @@ function parseQuantity(value, fallback = null) {
 }
 
 function normalizeUnit(value, fallback = "un") {
+  const aliases = {
+    grama: "g",
+    gramas: "g",
+    g: "g",
+    kg: "kg",
+    kilo: "kg",
+    kilos: "kg",
+    quilo: "kg",
+    quilos: "kg",
+    ml: "ml",
+    l: "l",
+    litro: "l",
+    litros: "l",
+    unidade: "un",
+    unidades: "un",
+    und: "un",
+    un: "un",
+    pacote: "pct",
+    pacotes: "pct",
+    pct: "pct"
+  };
   const unit = String(value || "").trim().toLowerCase();
-  return unit || fallback;
+  return aliases[unit] || unit || fallback;
+}
+
+function getUnitDefinition(unit) {
+  const normalized = normalizeUnit(unit);
+  const definitions = {
+    g: { group: "mass", factor: 1 },
+    kg: { group: "mass", factor: 1000 },
+    ml: { group: "volume", factor: 1 },
+    l: { group: "volume", factor: 1000 },
+    un: { group: "count", factor: 1 },
+    pct: { group: "package", factor: 1 }
+  };
+  return definitions[normalized] ? { unit: normalized, ...definitions[normalized] } : null;
+}
+
+function convertQuantity(value, fromUnit, toUnit) {
+  const source = getUnitDefinition(fromUnit);
+  const target = getUnitDefinition(toUnit);
+  const quantity = Number(value || 0);
+
+  if (normalizeUnit(fromUnit) === normalizeUnit(toUnit)) return { quantity, converted: false };
+  if (!source || !target || source.group !== target.group) {
+    return { quantity, converted: false, warning: true };
+  }
+
+  return {
+    quantity: quantity * source.factor / target.factor,
+    converted: true
+  };
+}
+
+function unitsAreCompatible(fromUnit, toUnit) {
+  if (normalizeUnit(fromUnit) === normalizeUnit(toUnit)) return true;
+  const source = getUnitDefinition(fromUnit);
+  const target = getUnitDefinition(toUnit);
+  return !!source && !!target && source.group === target.group;
+}
+
+function normalizeIngredientName(value) {
+  return String(value || "")
+    .trim()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+}
+
+function normalizeIngredientRows(rows = []) {
+  return (rows || []).filter(Boolean).map((row) => {
+    if (row?.production_ingredients) {
+      row.production_ingredients.unit_type = normalizeUnit(row.production_ingredients.unit_type);
+    }
+    if (row?.unit_type) row.unit_type = normalizeUnit(row.unit_type);
+    if (row?.unit_type === "") row.unit_type = null;
+    if (typeof row.unit_type === "undefined") row.unit_type = null;
+    return row;
+  });
+}
+
+function selectIngredientWithSupplier() {
+  return "*, suppliers(name)";
+}
+
+async function findIngredientByName(name) {
+  const normalized = normalizeIngredientName(name);
+  if (!normalized) return null;
+
+  const { data, error } = await supabase
+    .from("production_ingredients")
+    .select(selectIngredientWithSupplier());
+
+  if (error) throw error;
+  return (data || []).find((item) => normalizeIngredientName(item.name) === normalized) || null;
+}
+
+function validateNonNegative(value, fieldName) {
+  if (!Number.isFinite(value) || value < 0) {
+    const error = new Error(`${fieldName} deve ser maior ou igual a zero.`);
+    error.statusCode = 400;
+    throw error;
+  }
+  return value;
 }
 
 function normalizeProductionItems(items = []) {
@@ -80,7 +182,7 @@ export async function listIngredients(req, res) {
     const includeInactive = String(req.query.include_inactive || "false") === "true";
     let query = supabase
       .from("production_ingredients")
-      .select("*, suppliers(name)")
+      .select(selectIngredientWithSupplier())
       .order("name", { ascending: true });
 
     if (!includeInactive) query = query.eq("active", true);
@@ -88,10 +190,15 @@ export async function listIngredients(req, res) {
     const { data, error } = await query;
     if (error) throw error;
 
-    return res.json({ ok: true, ingredients: data || [] });
+    const ingredients = (data || []).map((item) => ({
+      ...item,
+      unit_type: normalizeUnit(item.unit_type)
+    }));
+
+    return res.json({ ok: true, ingredients });
   } catch (error) {
     console.error("[listIngredients]", error);
-    return res.status(500).json({ ok: false, message: formatError(error, "Erro ao listar insumos") });
+    return res.status(error.statusCode || 500).json({ ok: false, message: formatError(error, "Erro ao listar insumos") });
   }
 }
 
@@ -100,13 +207,42 @@ export async function createIngredient(req, res) {
     const name = String(req.body?.name || "").trim();
     if (!name) return res.status(400).json({ ok: false, message: "Nome do insumo obrigatório." });
 
+    const currentStock = validateNonNegative(parseQuantity(req.body?.current_stock, 0), "Estoque atual");
+    const reorderMinQuantity = validateNonNegative(parseQuantity(req.body?.reorder_min_quantity, 0), "Estoque mínimo");
+    const existing = await findIngredientByName(name);
+
+    if (existing) {
+      if (existing.active !== false) {
+        return res.json({
+          ok: true,
+          created: false,
+          ingredient: { ...existing, unit_type: normalizeUnit(existing.unit_type) }
+        });
+      }
+
+      const { data, error } = await supabase
+        .from("production_ingredients")
+        .update({ active: true, updated_at: new Date().toISOString() })
+        .eq("id", existing.id)
+        .select(selectIngredientWithSupplier())
+        .single();
+
+      if (error) throw error;
+
+      return res.json({
+        ok: true,
+        created: false,
+        ingredient: { ...data, unit_type: normalizeUnit(data.unit_type) }
+      });
+    }
+
     const payload = {
       name,
       category: req.body?.category || null,
       unit_type: normalizeUnit(req.body?.unit_type),
       supplier_id: req.body?.supplier_id || null,
-      current_stock: parseQuantity(req.body?.current_stock, 0),
-      reorder_min_quantity: parseQuantity(req.body?.reorder_min_quantity, 0),
+      current_stock: currentStock,
+      reorder_min_quantity: reorderMinQuantity,
       notes: req.body?.notes || null,
       active: req.body?.active !== false
     };
@@ -114,15 +250,15 @@ export async function createIngredient(req, res) {
     const { data, error } = await supabase
       .from("production_ingredients")
       .insert([payload])
-      .select("*, suppliers(name)")
+      .select(selectIngredientWithSupplier())
       .single();
 
     if (error) throw error;
 
-    return res.status(201).json({ ok: true, ingredient: data });
+    return res.status(201).json({ ok: true, created: true, ingredient: { ...data, unit_type: normalizeUnit(data.unit_type) } });
   } catch (error) {
     console.error("[createIngredient]", error);
-    return res.status(500).json({ ok: false, message: formatError(error, "Erro ao criar insumo") });
+    return res.status(error.statusCode || 500).json({ ok: false, message: formatError(error, "Erro ao criar insumo") });
   }
 }
 
@@ -140,8 +276,8 @@ export async function updateIngredient(req, res) {
     if (typeof req.body?.category !== "undefined") patch.category = req.body.category || null;
     if (typeof req.body?.unit_type !== "undefined") patch.unit_type = normalizeUnit(req.body.unit_type);
     if (typeof req.body?.supplier_id !== "undefined") patch.supplier_id = req.body.supplier_id || null;
-    if (typeof req.body?.current_stock !== "undefined") patch.current_stock = parseQuantity(req.body.current_stock, 0);
-    if (typeof req.body?.reorder_min_quantity !== "undefined") patch.reorder_min_quantity = parseQuantity(req.body.reorder_min_quantity, 0);
+    if (typeof req.body?.current_stock !== "undefined") patch.current_stock = validateNonNegative(parseQuantity(req.body.current_stock, 0), "Estoque atual");
+    if (typeof req.body?.reorder_min_quantity !== "undefined") patch.reorder_min_quantity = validateNonNegative(parseQuantity(req.body.reorder_min_quantity, 0), "Estoque mínimo");
     if (typeof req.body?.notes !== "undefined") patch.notes = req.body.notes || null;
     if (typeof req.body?.active !== "undefined") patch.active = !!req.body.active;
 
@@ -149,15 +285,15 @@ export async function updateIngredient(req, res) {
       .from("production_ingredients")
       .update(patch)
       .eq("id", id)
-      .select("*, suppliers(name)")
+      .select(selectIngredientWithSupplier())
       .single();
 
     if (error) throw error;
 
-    return res.json({ ok: true, ingredient: data });
+    return res.json({ ok: true, ingredient: { ...data, unit_type: normalizeUnit(data.unit_type) } });
   } catch (error) {
     console.error("[updateIngredient]", error);
-    return res.status(500).json({ ok: false, message: formatError(error, "Erro ao atualizar insumo") });
+    return res.status(error.statusCode || 500).json({ ok: false, message: formatError(error, "Erro ao atualizar insumo") });
   }
 }
 
@@ -191,7 +327,7 @@ export async function listProductIngredients(req, res) {
 
     if (error) throw error;
 
-    return res.json({ ok: true, items: data || [] });
+    return res.json({ ok: true, items: normalizeIngredientRows(data || []) });
   } catch (error) {
     console.error("[listProductIngredients]", error);
     return res.status(500).json({ ok: false, message: formatError(error, "Erro ao listar ficha técnica") });
@@ -275,9 +411,14 @@ export async function generateShoppingList(req, res) {
     for (const requirement of requirements || []) {
       const productQty = quantityByProduct.get(requirement.product_id) || 0;
       const ingredient = requirement.production_ingredients || {};
-      const unit = normalizeUnit(requirement.unit_type || ingredient.unit_type);
-      const requiredQty = roundQuantity(Number(requirement.quantity_per_unit || 0) * productQty);
-      const key = `${requirement.ingredient_id}:${unit}`;
+      const stockUnit = normalizeUnit(ingredient.unit_type);
+      const recipeUnit = normalizeUnit(requirement.unit_type || stockUnit);
+      const sourceRequiredQty = roundQuantity(Number(requirement.quantity_per_unit || 0) * productQty);
+      const compatibleUnits = unitsAreCompatible(recipeUnit, stockUnit);
+      const converted = convertQuantity(sourceRequiredQty, recipeUnit, stockUnit);
+      const outputUnit = compatibleUnits ? stockUnit : recipeUnit;
+      const requiredQty = roundQuantity(compatibleUnits ? converted.quantity : sourceRequiredQty);
+      const key = `${requirement.ingredient_id}:${outputUnit}`;
 
       requirementsByProduct.set(
         requirement.product_id,
@@ -289,23 +430,29 @@ export async function generateShoppingList(req, res) {
           ingredient_id: requirement.ingredient_id,
           item_name: ingredient.name || "Insumo",
           category: ingredient.category || null,
-          unit_type: unit,
+          unit_type: outputUnit,
+          stock_unit_type: stockUnit,
           supplier_id: ingredient.supplier_id || null,
           supplier_name: ingredient.suppliers?.name || null,
-          current_stock: Number(ingredient.current_stock || 0),
+          current_stock: compatibleUnits ? Number(ingredient.current_stock || 0) : 0,
           required_quantity: 0,
           purchase_quantity: 0,
+          conversion_warning: !compatibleUnits,
           products: []
         });
       }
 
       const item = listByKey.get(key);
       item.required_quantity = roundQuantity(item.required_quantity + requiredQty);
+      item.conversion_warning = item.conversion_warning || !compatibleUnits;
       item.products.push({
         product_id: requirement.product_id,
         product_name: productById.get(requirement.product_id)?.name || requirement.product_id,
         planned_quantity: productQty,
         quantity_per_unit: Number(requirement.quantity_per_unit || 0),
+        unit_type: recipeUnit,
+        source_required_quantity: sourceRequiredQty,
+        source_unit_type: recipeUnit,
         required_quantity: requiredQty
       });
     }
