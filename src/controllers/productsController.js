@@ -518,8 +518,7 @@ export async function uploadPreparationVideo(req, res) {
     const { data: product, error: updateError } = await supabase
       .from("products")
       .update({
-        preparation_video_url: publicUrl,
-        preparation_video_path: path
+        preparation_video_url: publicUrl
       })
       .eq("id", id)
       .select("*")
