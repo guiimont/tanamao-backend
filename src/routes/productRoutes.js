@@ -6,6 +6,7 @@ import {
   resolveReplenishmentRequest,
   createProduct,
   updateProduct,
+  uploadPreparationVideo,
   deleteProduct
 } from "../controllers/productsController.js";
 import { verifyToken, requireAdmin } from "../middlewares/authMiddleware.js";
@@ -22,6 +23,7 @@ router.patch("/replenishment/:id", verifyToken, requireAdmin, resolveReplenishme
 
 // Admin-only catalog mutations.
 router.post("/", verifyToken, requireAdmin, createProduct);
+router.post("/:id/preparation-video", verifyToken, requireAdmin, uploadPreparationVideo);
 router.put("/:id", verifyToken, requireAdmin, updateProduct);
 router.delete("/:id", verifyToken, requireAdmin, deleteProduct);
 

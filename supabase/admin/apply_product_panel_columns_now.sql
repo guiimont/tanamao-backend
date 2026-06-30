@@ -20,6 +20,8 @@ alter table if exists products
   add column if not exists usage_contexts text[] not null default array[]::text[],
   add column if not exists ingredients text,
   add column if not exists preparation_method text,
+  add column if not exists preparation_video_url text,
+  add column if not exists preparation_video_path text,
   add column if not exists reorder_min_quantity integer default 0 check (reorder_min_quantity >= 0),
   add column if not exists reorder_quantity integer default 0 check (reorder_quantity >= 0);
 
@@ -31,6 +33,12 @@ comment on column products.ingredients is
 
 comment on column products.preparation_method is
   'Preparation method. Public only for free recipe products.';
+
+comment on column products.preparation_video_url is
+  'Preparation video public URL. Public only for free recipe products.';
+
+comment on column products.preparation_video_path is
+  'Supabase Storage path for the preparation video.';
 
 create table if not exists replenishment_requests (
   id uuid primary key default gen_random_uuid(),

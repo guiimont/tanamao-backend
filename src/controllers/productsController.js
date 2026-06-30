@@ -1,6 +1,19 @@
 import { supabase } from "../config/supabase.js";
 import sharp from "sharp";
 
+const RECIPE_VIDEO_BUCKET = "recipe-videos";
+const MAX_RECIPE_VIDEO_BYTES = 45 * 1024 * 1024;
+const VIDEO_MIME_EXTENSIONS = {
+  "video/mp4": "mp4",
+  "video/webm": "webm",
+  "video/quicktime": "mov"
+};
+const VIDEO_EXTENSION_MIMES = {
+  mp4: "video/mp4",
+  webm: "video/webm",
+  mov: "video/quicktime"
+};
+
 // ✅ NOVA FUNÇÃO: Otimização de Imagem (WebP, Max 800px, 80% Qualidade)
 async function optimizeImage(base64Str) {
   if (!base64Str || !base64Str.startsWith('data:image')) return base64Str;
@@ -62,6 +75,55 @@ function getErrorMessage(error, fallback) {
   return error?.message ? `${fallback}: ${error.message}` : fallback;
 }
 
+function parseVideoBase64(value) {
+  const raw = String(value || "");
+  if (!raw) return null;
+
+  const match = raw.match(/^data:([^;]+);base64,(.+)$/);
+  if (match) {
+    return {
+      contentType: match[1],
+      buffer: Buffer.from(match[2], "base64")
+    };
+  }
+
+  return {
+    contentType: null,
+    buffer: Buffer.from(raw, "base64")
+  };
+}
+
+function sanitizeFileSegment(value, fallback = "video") {
+  return String(value || fallback)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80) || fallback;
+}
+
+async function ensureRecipeVideoBucket() {
+  const { error } = await supabase.storage.createBucket(RECIPE_VIDEO_BUCKET, {
+    public: true,
+    fileSizeLimit: MAX_RECIPE_VIDEO_BYTES,
+    allowedMimeTypes: Object.keys(VIDEO_MIME_EXTENSIONS)
+  });
+
+  if (error && !String(error.message || "").toLowerCase().includes("already exists")) {
+    throw error;
+  }
+
+  if (error) {
+    const { error: updateError } = await supabase.storage.updateBucket(RECIPE_VIDEO_BUCKET, {
+      public: true,
+      fileSizeLimit: MAX_RECIPE_VIDEO_BYTES,
+      allowedMimeTypes: Object.keys(VIDEO_MIME_EXTENSIONS)
+    });
+    if (updateError) throw updateError;
+  }
+}
+
 function isPublicRecipeProduct(product) {
   const category = String(product?.category || "").toLowerCase();
   return product?.active !== false
@@ -94,6 +156,7 @@ function sanitizePublicProduct(product) {
   if (isPublicRecipeProduct(product)) {
     publicProduct.ingredients = product.ingredients || "";
     publicProduct.preparation_method = product.preparation_method || "";
+    publicProduct.preparation_video_url = product.preparation_video_url || "";
   }
 
   return publicProduct;
@@ -103,7 +166,7 @@ export async function listProducts(req, res) {
   try {
     const { data, error } = await supabase
       .from("products")
-      .select("id, name, description, price, image_url, active, sort_order, category, serving_size, shelf_life_days, storage_instructions, lead_time_hours, available_days, max_units_per_day, is_sellable, is_gift_recipe, weekly_guide_note, usage_contexts, ingredients, preparation_method")
+      .select("*")
       .eq("active", true)
       .order("sort_order", { ascending: true });
 
@@ -234,6 +297,7 @@ export async function createProduct(req, res) {
       usage_contexts,
       ingredients,
       preparation_method,
+      preparation_video_url,
       reorder_min_quantity,
       reorder_quantity
     } = req.body;
@@ -280,6 +344,7 @@ export async function createProduct(req, res) {
     if (typeof usage_contexts !== "undefined") payload.usage_contexts = normalizeUsageContexts(usage_contexts);
     if (typeof ingredients !== "undefined") payload.ingredients = ingredients;
     if (typeof preparation_method !== "undefined") payload.preparation_method = preparation_method;
+    if (typeof preparation_video_url !== "undefined") payload.preparation_video_url = preparation_video_url || null;
     if (typeof reorder_min_quantity !== "undefined") payload.reorder_min_quantity = parseInteger(reorder_min_quantity, 0);
     if (typeof reorder_quantity !== "undefined") payload.reorder_quantity = parseInteger(reorder_quantity, 0);
 
@@ -329,6 +394,7 @@ export async function updateProduct(req, res) {
       usage_contexts,
       ingredients,
       preparation_method,
+      preparation_video_url,
       reorder_min_quantity,
       reorder_quantity
     } = req.body;
@@ -370,6 +436,7 @@ export async function updateProduct(req, res) {
     if (typeof usage_contexts !== "undefined") patch.usage_contexts = normalizeUsageContexts(usage_contexts);
     if (typeof ingredients !== "undefined") patch.ingredients = ingredients;
     if (typeof preparation_method !== "undefined") patch.preparation_method = preparation_method;
+    if (typeof preparation_video_url !== "undefined") patch.preparation_video_url = preparation_video_url || null;
     if (typeof reorder_min_quantity !== "undefined") patch.reorder_min_quantity = parseInteger(reorder_min_quantity, 0);
     if (typeof reorder_quantity !== "undefined") patch.reorder_quantity = parseInteger(reorder_quantity, 0);
 
@@ -397,6 +464,80 @@ export async function updateProduct(req, res) {
     return res.status(500).json({
       ok: false,
       message: getErrorMessage(e, "Erro ao atualizar")
+    });
+  }
+}
+
+export async function uploadPreparationVideo(req, res) {
+  try {
+    const { id } = req.params;
+    const fileName = sanitizeFileSegment(req.body?.file_name || "preparo.mp4");
+    const parsed = parseVideoBase64(req.body?.data_base64);
+    const extension = String(fileName.split(".").pop() || "").toLowerCase();
+    const contentType = String(req.body?.content_type || parsed?.contentType || VIDEO_EXTENSION_MIMES[extension] || "").toLowerCase();
+
+    if (!id) {
+      return res.status(400).json({ ok: false, message: "Produto obrigatório." });
+    }
+
+    if (!parsed?.buffer?.length) {
+      return res.status(400).json({ ok: false, message: "Arquivo de vídeo obrigatório." });
+    }
+
+    if (!VIDEO_MIME_EXTENSIONS[contentType]) {
+      return res.status(400).json({ ok: false, message: "Formato de vídeo inválido. Use MP4, WebM ou MOV." });
+    }
+
+    if (parsed.buffer.length > MAX_RECIPE_VIDEO_BYTES) {
+      return res.status(400).json({ ok: false, message: "Vídeo muito grande. Use até 45 MB para este teste." });
+    }
+
+    await ensureRecipeVideoBucket();
+
+    const ext = VIDEO_MIME_EXTENSIONS[contentType];
+    const baseName = fileName.replace(/\.[a-z0-9]+$/i, "") || "preparo";
+    const path = `${sanitizeFileSegment(id, "produto")}/${Date.now()}-${baseName}.${ext}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from(RECIPE_VIDEO_BUCKET)
+      .upload(path, parsed.buffer, {
+        contentType,
+        upsert: true,
+        cacheControl: "3600"
+      });
+
+    if (uploadError) throw uploadError;
+
+    const { data: publicData } = supabase.storage
+      .from(RECIPE_VIDEO_BUCKET)
+      .getPublicUrl(path);
+
+    const publicUrl = publicData?.publicUrl;
+    if (!publicUrl) throw new Error("Não foi possível gerar URL pública do vídeo.");
+
+    const { data: product, error: updateError } = await supabase
+      .from("products")
+      .update({
+        preparation_video_url: publicUrl,
+        preparation_video_path: path
+      })
+      .eq("id", id)
+      .select("*")
+      .single();
+
+    if (updateError) throw updateError;
+
+    return res.json({
+      ok: true,
+      video_url: publicUrl,
+      video_path: path,
+      product
+    });
+  } catch (e) {
+    console.error("[uploadPreparationVideo]", e);
+    return res.status(500).json({
+      ok: false,
+      message: getErrorMessage(e, "Erro ao enviar vídeo")
     });
   }
 }
