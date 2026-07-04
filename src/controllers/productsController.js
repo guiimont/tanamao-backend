@@ -162,6 +162,25 @@ function sanitizePublicProduct(product) {
   return publicProduct;
 }
 
+function normalizeProductVisibilityPatch(patch) {
+  if (patch.is_gift_recipe === true) {
+    patch.is_sellable = false;
+    patch.category = "brinde";
+  }
+
+  if (patch.category === "brinde") {
+    patch.is_sellable = false;
+    patch.is_gift_recipe = true;
+  }
+
+  if (patch.is_sellable === true) {
+    patch.is_gift_recipe = false;
+    if (patch.category === "brinde") patch.category = null;
+  }
+
+  return patch;
+}
+
 export async function listProducts(req, res) {
   try {
     const { data, error } = await supabase
@@ -515,11 +534,17 @@ export async function uploadPreparationVideo(req, res) {
     const publicUrl = publicData?.publicUrl;
     if (!publicUrl) throw new Error("Não foi possível gerar URL pública do vídeo.");
 
+    const productPatch = {
+      preparation_video_url: publicUrl
+    };
+
+    if (typeof req.body?.category !== "undefined") productPatch.category = req.body.category || null;
+    if (typeof req.body?.is_sellable !== "undefined") productPatch.is_sellable = parseBoolean(req.body.is_sellable);
+    if (typeof req.body?.is_gift_recipe !== "undefined") productPatch.is_gift_recipe = parseBoolean(req.body.is_gift_recipe);
+
     const { data: product, error: updateError } = await supabase
       .from("products")
-      .update({
-        preparation_video_url: publicUrl
-      })
+      .update(normalizeProductVisibilityPatch(productPatch))
       .eq("id", id)
       .select("*")
       .single();
