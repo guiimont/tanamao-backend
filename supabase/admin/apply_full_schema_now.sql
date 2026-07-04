@@ -749,7 +749,7 @@ execute function sync_product_replenishment_request();
 insert into settings (key, value)
 values
   ('order_limits', '{"max_per_day": 999}'::jsonb),
-  ('gateway_fees', '{"pix": 0, "debit_card": 0, "credit_card": 0}'::jsonb),
+  ('gateway_fees', '{"mercadopago": 0, "pix": 0, "debit_card": 0, "credit_card": 0}'::jsonb),
   (
     'cart_discounts',
     '{

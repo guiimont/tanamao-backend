@@ -7,8 +7,8 @@ export const PRODUCT_CATALOG = {
 };
 
 export const PAYMENT_METHOD_LABELS = {
+  mercadopago: "Mercado Pago",
   pix: "Pix",
   debito: "Débito",
-  credito: "Crédito",
-  vale: "Vale Alimentação"
+  credito: "Crédito"
 };

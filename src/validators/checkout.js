@@ -25,7 +25,7 @@ export const customerSchema = z.object({
 
 export const checkoutSchema = z.object({
   items: z.array(itemSchema).min(1),
-  paymentMethod: z.enum(["pix", "debito", "credito", "vale"]),
+  paymentMethod: z.enum(["mercadopago", "pix", "debito", "credito"]).default("mercadopago"),
   customer: customerSchema,
   fulfillment: z.object({
     scheduledDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),

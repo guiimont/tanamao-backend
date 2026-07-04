@@ -149,10 +149,10 @@ export async function createPreference(req, res) {
 
     const fees = feeConfig?.value || {};
     const feePercent = {
+      mercadopago: fees.mercadopago || 0,
       pix: fees.pix || 0,
       debito: fees.debit_card || 0,
-      credito: fees.credit_card || 0,
-      vale: 0
+      credito: fees.credit_card || 0
     };
 
     const gatewayFee = Number((order.total * (feePercent[paymentMethod] || 0) / 100).toFixed(2));
@@ -173,7 +173,7 @@ export async function createPreference(req, res) {
       ],
       payer: {
         name: customer.nome,
-        email: "pix@tanamaofit.com.br"
+        email: "pagamento@tanamaofit.com.br"
       },
       external_reference: externalReference,
       back_urls: {
