@@ -751,6 +751,23 @@ values
   ('order_limits', '{"max_per_day": 999}'::jsonb),
   ('gateway_fees', '{"pix": 0, "debit_card": 0, "credit_card": 0}'::jsonb),
   (
+    'cart_discounts',
+    '{
+      "enabled": true,
+      "quantity_tiers": [
+        { "min_items": 3, "rate": 0.03 },
+        { "min_items": 5, "rate": 0.06 },
+        { "min_items": 8, "rate": 0.09 },
+        { "min_items": 12, "rate": 0.12 }
+      ],
+      "diversity_tiers": [
+        { "min_unique_items": 3, "rate": 0.01 },
+        { "min_unique_items": 5, "rate": 0.02 }
+      ],
+      "max_discount_rate": 0.15
+    }'::jsonb
+  ),
+  (
     'site_content',
     '{
       "brandSubtitle": "Alimentacao inteligente sob encomenda",

@@ -25,6 +25,21 @@ function isBusinessError(error) {
   return BUSINESS_ERROR_PATTERNS.some((pattern) => error?.message?.includes(pattern));
 }
 
+async function getSettingsValue(key, fallback = {}) {
+  const { data, error } = await supabase
+    .from("settings")
+    .select("value")
+    .eq("key", key)
+    .maybeSingle();
+
+  if (error) {
+    console.warn(`[checkout:settings] Falha ao carregar ${key}:`, error.message);
+    return fallback;
+  }
+
+  return data?.value || fallback;
+}
+
 async function ensureScheduledCapacity({ items, productsMap, fulfillment }) {
   if (!fulfillment?.scheduledDate) return;
 
@@ -102,14 +117,9 @@ export async function createPreference(req, res) {
 
     const { items, paymentMethod, customer, fulfillment, source } = parsed.data;
 
-    // 1. BUSCA LIMITE DE PEDIDOS
-    const { data: limitConfig } = await supabase
-      .from('settings')
-      .select('value')
-      .eq('key', 'order_limits')
-      .single();
-
-    const limit = Number(limitConfig?.value?.max_per_day || 999);
+    const limitConfig = await getSettingsValue("order_limits", {});
+    const cartDiscountConfig = await getSettingsValue("cart_discounts", {});
+    const limit = Number(limitConfig?.max_per_day || 999);
     const hoje = new Date().toISOString().slice(0, 10);
 
     const { count } = await supabase
@@ -127,7 +137,7 @@ export async function createPreference(req, res) {
 
     const ids = items.map((item) => item.id);
     const productsMap = await getProductsMapByIds(ids);
-    const order = buildOrderFromDatabase(items, productsMap, paymentMethod);
+    const order = buildOrderFromDatabase(items, productsMap, paymentMethod, cartDiscountConfig);
     await ensureScheduledCapacity({ items, productsMap, fulfillment });
 
     // 2. BUSCA TAXAS DINÂMICAS
