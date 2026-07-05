@@ -62,6 +62,20 @@ function parseEmailAddress(value) {
   };
 }
 
+function maskEmail(email) {
+  const [local, domain] = String(email || "").split("@");
+  if (!local || !domain) return "";
+  return `${local.slice(0, 2)}***@${domain}`;
+}
+
+async function readJsonResponse(response) {
+  try {
+    return await response.json();
+  } catch {
+    return {};
+  }
+}
+
 function createMessage({ name, resetUrl }) {
   const displayName = name || "equipe";
   const safeDisplayName = escapeHtml(displayName);
@@ -136,7 +150,9 @@ async function sendViaBrevo({ to, name, message }) {
   });
 
   await assertEmailApiResponse(response, "Brevo");
-  return { sent: true, provider: "brevo" };
+  const result = await readJsonResponse(response);
+  console.info(`[password reset] Brevo aceitou envio para ${maskEmail(to)} messageId=${result.messageId || "n/a"}`);
+  return { sent: true, provider: "brevo", messageId: result.messageId || null };
 }
 
 async function sendViaResend({ to, message }) {
@@ -158,7 +174,9 @@ async function sendViaResend({ to, message }) {
   });
 
   await assertEmailApiResponse(response, "Resend");
-  return { sent: true, provider: "resend" };
+  const result = await readJsonResponse(response);
+  console.info(`[password reset] Resend aceitou envio para ${maskEmail(to)} id=${result.id || "n/a"}`);
+  return { sent: true, provider: "resend", messageId: result.id || null };
 }
 
 async function sendViaSmtp({ to, message }) {
