@@ -31,6 +31,9 @@ export const env = {
   // Recuperacao de senha do painel
   passwordResetTokenMinutes: Number(process.env.PASSWORD_RESET_TOKEN_MINUTES || 60),
   passwordResetFromEmail: process.env.PASSWORD_RESET_FROM_EMAIL || "Ta na Mao <no-reply@tanamaofit.com.br>",
+  emailProvider: String(process.env.EMAIL_PROVIDER || "").trim().toLowerCase(),
+  brevoApiKey: process.env.BREVO_API_KEY || "",
+  resendApiKey: process.env.RESEND_API_KEY || "",
 
   // SMTP opcional para envio do link de recuperacao
   smtpHost: process.env.SMTP_HOST || "",
