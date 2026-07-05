@@ -2,6 +2,7 @@ import nodemailer from "nodemailer";
 import { env } from "../config/env.js";
 
 const SEND_TIMEOUT_MS = 15000;
+const DEFAULT_SENDER_NAME = "Ta na Mao";
 
 function hasSmtpConfig() {
   return Boolean(env.smtpHost && env.smtpUser && env.smtpPass);
@@ -48,12 +49,15 @@ function escapeHtml(value) {
 }
 
 function parseEmailAddress(value) {
-  const raw = String(value || "").trim();
+  const raw = String(value || "")
+    .trim()
+    .replace(/^"(.+)"$/, "$1")
+    .trim();
   const match = raw.match(/^(.*?)<([^>]+)>$/);
-  if (!match) return { name: "", email: raw };
+  if (!match) return { name: DEFAULT_SENDER_NAME, email: raw };
 
   return {
-    name: match[1].trim().replace(/^"|"$/g, ""),
+    name: match[1].trim().replace(/^"|"$/g, "") || DEFAULT_SENDER_NAME,
     email: match[2].trim()
   };
 }
