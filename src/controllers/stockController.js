@@ -93,3 +93,31 @@ export async function createStockBatch(req, res) {
   if (error) return res.status(500).json({ ok: false, message: error.message });
   return res.status(201).json({ ok: true, count: payload.length });
 }
+
+export async function deleteStockBatch(req, res) {
+  const ids = Array.isArray(req.body?.ids)
+    ? [...new Set(req.body.ids.map((id) => String(id || "").trim()).filter(Boolean))]
+    : [];
+  const confirmToken = String(req.body?.confirm_token || "");
+
+  if (confirmToken !== "DELETE_STOCK_ENTRIES") {
+    return res.status(400).json({ ok: false, message: "Confirmacao invalida." });
+  }
+
+  if (!ids.length) {
+    return res.status(400).json({ ok: false, message: "Nenhuma compra selecionada." });
+  }
+
+  if (ids.length > 500) {
+    return res.status(400).json({ ok: false, message: "Limite de 500 registros por exclusao." });
+  }
+
+  const { data, error } = await supabase
+    .from("stock_entries")
+    .delete()
+    .in("id", ids)
+    .select("id");
+
+  if (error) return res.status(500).json({ ok: false, message: error.message });
+  return res.json({ ok: true, count: data?.length || 0 });
+}
