@@ -26,5 +26,16 @@ export const env = {
   supabaseServiceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY || "", // Apenas para bypass de RLS
 
   // Segurança
-  jwtSecret: process.env.JWT_SECRET || "chave_temporaria_desenvolvimento"
+  jwtSecret: process.env.JWT_SECRET || "chave_temporaria_desenvolvimento",
+
+  // Recuperacao de senha do painel
+  passwordResetTokenMinutes: Number(process.env.PASSWORD_RESET_TOKEN_MINUTES || 60),
+  passwordResetFromEmail: process.env.PASSWORD_RESET_FROM_EMAIL || "Ta na Mao <no-reply@tanamaofit.com.br>",
+
+  // SMTP opcional para envio do link de recuperacao
+  smtpHost: process.env.SMTP_HOST || "",
+  smtpPort: Number(process.env.SMTP_PORT || 587),
+  smtpSecure: String(process.env.SMTP_SECURE || "false").toLowerCase() === "true",
+  smtpUser: process.env.SMTP_USER || "",
+  smtpPass: process.env.SMTP_PASS || ""
 };

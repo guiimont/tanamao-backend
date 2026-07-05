@@ -25,6 +25,9 @@ create table if not exists employees (
   name text not null,
   email text not null unique,
   password_hash text not null,
+  password_reset_token_hash text,
+  password_reset_expires_at timestamptz,
+  password_reset_requested_at timestamptz,
   role text not null default 'operador',
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -34,6 +37,9 @@ alter table if exists employees
   add column if not exists name text,
   add column if not exists email text,
   add column if not exists password_hash text,
+  add column if not exists password_reset_token_hash text,
+  add column if not exists password_reset_expires_at timestamptz,
+  add column if not exists password_reset_requested_at timestamptz,
   add column if not exists role text not null default 'operador',
   add column if not exists created_at timestamptz not null default now(),
   add column if not exists updated_at timestamptz not null default now();
@@ -44,6 +50,10 @@ create index if not exists idx_employees_role
 create unique index if not exists idx_employees_email_unique
   on employees(email)
   where email is not null;
+
+create index if not exists idx_employees_password_reset_token_hash
+  on employees(password_reset_token_hash)
+  where password_reset_token_hash is not null;
 
 create table if not exists suppliers (
   id uuid primary key default gen_random_uuid(),

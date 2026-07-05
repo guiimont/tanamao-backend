@@ -10,3 +10,14 @@ export const loginRateLimiter = rateLimit({
   standardHeaders: true, // Retorna info de limite nos headers `RateLimit-*`
   legacyHeaders: false, // Desativa os headers `X-RateLimit-*`
 });
+
+export const passwordResetRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 3,
+  message: {
+    ok: false,
+    message: "Muitas tentativas de recuperacao. Tente novamente apos alguns minutos."
+  },
+  standardHeaders: true,
+  legacyHeaders: false
+});
