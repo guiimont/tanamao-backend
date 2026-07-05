@@ -10,6 +10,9 @@ function createTransporter() {
     host: env.smtpHost,
     port: env.smtpPort,
     secure: env.smtpSecure,
+    connectionTimeout: 15000,
+    greetingTimeout: 15000,
+    socketTimeout: 20000,
     auth: {
       user: env.smtpUser,
       pass: env.smtpPass
@@ -39,6 +42,7 @@ export async function sendPasswordResetEmail({ to, name, resetUrl }) {
   const safeDisplayName = escapeHtml(displayName);
   const safeResetUrl = escapeHtml(resetUrl);
   const transporter = createTransporter();
+  console.info(`[password reset] Enviando via SMTP ${env.smtpHost}:${env.smtpPort} secure=${env.smtpSecure}`);
 
   await transporter.sendMail({
     from: env.passwordResetFromEmail,
