@@ -22,31 +22,32 @@ const app = express();
 // 1. Configuração de Proxy (Essencial para Rate Limit no Render)
 app.set("trust proxy", 1);
 
-// 2. Segurança de Headers
+// 2. Segurança de Headers e Parsing
 app.use(helmet());
 app.use(morgan("dev"));
 app.use(express.json({ limit: "60mb" }));
 app.use(express.urlencoded({ extended: true, limit: "60mb" }));
 
-// 3. FECHAMENTO DO CORS (Configuração Restritiva)
+// 3. CONFIGURAÇÃO DO CORS
 const allowedOrigins = [
   "https://www.tanamaofit.com.br",
-  "https://tanamaofit.com.br"
+  "https://tanamaofit.com.br",
+  "http://localhost:5500",
+  "http://127.0.0.1:5500",
+  "http://localhost:3000",
+  "http://127.0.0.1:3000",
+  "http://localhost:5173",
+  "http://127.0.0.1:5173",
+  "http://localhost:8080",
+  "http://127.0.0.1:8080"
 ];
-
-// Adiciona localhost apenas se estiver em ambiente de desenvolvimento
-if (process.env.NODE_ENV !== "production") {
-  allowedOrigins.push("http://localhost:5500", "http://127.0.0.1:5500");
-}
 
 app.use(cors({
   origin: function (origin, callback) {
-    // Permite requisições sem origin (como mobile apps ou ferramentas de teste tipo Postman) 
-    // ou se a origin estiver na lista permitida
-    if (!origin || allowedOrigins.indexOf(origin) !== -1) {
+    if (!origin || allowedOrigins.indexOf(origin) !== -1 || process.env.NODE_ENV !== "production" || origin.includes("github.io")) {
       callback(null, true);
     } else {
-      callback(new Error("Acesso negado pelo CORS: Origem não permitida."));
+      callback(new Error("Acesso negado pelo CORS: Origem não permitida (" + origin + ")."));
     }
   },
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
@@ -54,7 +55,7 @@ app.use(cors({
   credentials: true
 }));
 
-// 4. Rotas
+// 4. Rotas da API
 app.use("/api/auth", authRoutes);
 app.use("/api/products", productRoutes);
 app.use("/api/checkout", checkoutRoutes);
@@ -75,10 +76,3 @@ app.listen(PORT, () => {
   console.log(`==> Servidor Tanamao ativo em: ${process.env.NODE_ENV || 'development'}`);
   console.log(`==> Porta: ${PORT}`);
 });
-
-
-
-
-
-
-
