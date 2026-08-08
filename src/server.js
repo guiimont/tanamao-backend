@@ -14,6 +14,7 @@ import costRoutes from "./routes/costRoutes.js";
 import supplierRoutes from "./routes/supplierRoutes.js";
 import settingsRoutes from "./routes/settingsRoutes.js";
 import productionRoutes from "./routes/productionRoutes.js";
+import productionRoundRoutes from "./routes/productionRoundRoutes.js";
 import paymentRoutes from "./routes/paymentRoutes.js";
 import employeeRoutes from "./routes/employeeRoutes.js";
 
@@ -67,6 +68,7 @@ app.use("/api/suppliers", supplierRoutes);
 app.use("/api/settings", settingsRoutes);
 app.use("/api/employees", employeeRoutes);
 app.use("/api/operations/production", productionRoutes);
+app.use("/api/operations/production-rounds", productionRoundRoutes);
 
 // Rota de saúde para o Render
 app.get("/health", (req, res) => res.status(200).send("OK"));
